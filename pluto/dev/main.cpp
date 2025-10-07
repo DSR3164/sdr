@@ -60,8 +60,6 @@ int main(void)
         //заполнение tx_buff значениями сэмплов первые 16 бит - I, вторые 16 бит - Q.
     for (int i = 1; i < 2 * tx_mtu * 10; i+=2)
     {
-        double s = sin (2.0 * M_PI * carrier_freq * i / sample_rate);
-
         // ЗДЕСЬ БУДУТ ВАШИ СЭМПЛЫ
         tx_buff[i] = (int16_t)(2047 * 1) << 4 ;   // I
         tx_buff[i+1] = (int16_t)(2047 * -1) << 4; // Q
@@ -83,7 +81,8 @@ int main(void)
     size_t iteration_count = 10;
     long long last_time = 0;
     
-    FILE* file = fopen("../symbols.pcm", "wb");
+    FILE* file = fopen("../rx.pcm", "wb");
+    FILE* file1 = fopen("../tx.pcm", "wb");
 
     // Начинается работа с получением и отправкой сэмплов
     for (size_t buffers_read = 0; buffers_read < iteration_count; buffers_read++)
@@ -121,6 +120,7 @@ int main(void)
         }
         
         fwrite(rx_buffer, 2 * rx_mtu * sizeof(int16_t), 1, file);
+        fwrite(tx_buffs, 2 * rx_mtu * sizeof(int16_t), 1, file1);
     }
 
     fclose(file);
