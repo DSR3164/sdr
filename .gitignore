@@ -1,0 +1,10 @@
+*
+!*.*
+*.json
+
+!pluto/
+!pluto/dev/
+!pluto/dev/**
+
+pluto/dev/build
+.vscode
