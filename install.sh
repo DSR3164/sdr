@@ -1,8 +1,5 @@
-sudo apt-get install python3-pip python3-setuptools python3-numpy swig python3-matplotlib
-sudo apt-get install cmake g++ libpython3-dev 
-sudo apt-get install libxml2 libxml2-dev bison flex libcdk5-dev
-sudo apt-get install libusb-1.0-0-dev libaio-dev pkg-config 
-sudo apt install libavahi-common-dev libavahi-client-dev
+sudo apt-get install python3-pip python3-setuptools python3-numpy swig python3-matplotlib cmake g++ libpython3-dev  libxml2 libxml2-dev bison flex libcdk5-dev libusb-1.0-0-dev libaio-dev pkg-config -y
+sudo apt install libavahi-common-dev libavahi-client-dev -y
 
 cd pluto
 
