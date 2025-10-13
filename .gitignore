@@ -5,6 +5,7 @@
 !pluto/
 !pluto/dev/
 !pluto/dev/**
+!psk
 
 pluto/dev/build
 .vscode
