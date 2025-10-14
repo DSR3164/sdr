@@ -7,6 +7,28 @@
 #include <cstring>
 #include <string.h>
 
+int16_t *read_pcm(const char *filename, size_t *sample_count, int16_t *samples)
+{
+    FILE *file = fopen(filename, "rb");
+    
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    printf("file_size = %ld\n", file_size);
+    
+    *sample_count = file_size / sizeof(int16_t);
+    
+    size_t sf = fread(samples, sizeof(int16_t), *sample_count, file);
+    
+    if (sf == 0){
+        printf("file %s empty!", filename);
+    }
+    
+    fclose(file);
+    
+    return samples;
+}
+
 
 int main(void)
 {
@@ -57,32 +79,26 @@ int main(void)
     int16_t tx_buff[2*tx_mtu * 10];
     int16_t rx_buffer[2*rx_mtu * 10];
 
-        //заполнение tx_buff значениями сэмплов первые 16 бит - I, вторые 16 бит - Q.
-    for (int i = 1; i < 2 * tx_mtu * 10; i+=2)
+    int buffer_size = 1920;
+    long file_size = 3245278;
+    int16_t *samples = (int16_t *)malloc(file_size);
+    size_t sample_count = 0;
+    samples = read_pcm("/home/plutoSDR/sdr/1.pcm", &sample_count, samples);
+    printf("\nКоличество сэмплов: %ld\nКоличесвто буфферов: %ld\n", sample_count, sample_count/buffer_size);
+    int16_t *tx_buffs[sample_count/buffer_size];
+    for (int i = 0; i<((int)sample_count/buffer_size); i++)
     {
-        // ЗДЕСЬ БУДУТ ВАШИ СЭМПЛЫ
-        tx_buff[i] = (int16_t)(2047 * 1) << 4 ;   // I
-        tx_buff[i+1] = (int16_t)(2047 * -1) << 4; // Q
+        memcpy(tx_buffs, samples + i * buffer_size, sizeof(int16_t)*buffer_size);
     }
+    
+    printf("Длина буферов: %ld\n", sizeof(tx_buffs)/sizeof(int16_t));
 
-    //prepare fixed bytes in transmit buffer
-    //we transmit a pattern of FFFF FFFF [TS_0]00 [TS_1]00 [TS_2]00 [TS_3]00 [TS_4]00 [TS_5]00 [TS_6]00 [TS_7]00 FFFF FFFF
-    //that is a flag (FFFF FFFF) followed by the 64 bit timestamp, split into 8 bytes and packed into the lsb of each of the DAC words.
-    //DAC samples are left aligned 12-bits, so each byte is left shifted into place
-    // for(size_t i = 0; i < 2; i++)
-    // {
-    //     tx_buff[0 + i] = 0xffff;
-    //     // 8 x timestamp words
-    //     tx_buff[10 + i] = 0xffff;
-    // }
-    
-    
     // Количество итерация чтения из буфера
     size_t iteration_count = 10;
     long long last_time = 0;
     
-    FILE* file = fopen("../rx.pcm", "wb");
-    FILE* file1 = fopen("../tx.pcm", "wb");
+    // FILE* file = fopen("../rx.pcm", "wb");
+    // FILE* file1 = fopen("../tx.pcm", "wb");
 
     // Начинается работа с получением и отправкой сэмплов
     for (size_t buffers_read = 0; buffers_read < iteration_count; buffers_read++)
@@ -101,15 +117,15 @@ int main(void)
         // Переменная для времени отправки сэмплов относительно текущего приема
         long long tx_time = timeNs + (4 * 1000 * 1000); // на 4 [мс] в будущее
 
-        // Добавляем время, когда нужно передать блок tx_buff, через tx_time -наносекунд
-        for(size_t i = 0; i < 8; i++)
-        {
-            uint8_t tx_time_byte = (tx_time >> (i * 8)) & 0xff;
-            tx_buff[2 + i] = tx_time_byte << 4;
-        }
+        // // Добавляем время, когда нужно передать блок tx_buff, через tx_time -наносекунд
+        // for(size_t i = 0; i < 8; i++)
+        // {
+        //     uint8_t tx_time_byte = (tx_time >> (i * 8)) & 0xff;
+        //     tx_buff[2 + i] = tx_time_byte << 4;
+        // }
 
         // Здесь отправляем наш tx_buff массив
-        void *tx_buffs[] = {tx_buff};
+        
         if( (buffers_read==2) ){
             flags = SOAPY_SDR_HAS_TIME;
             int st = SoapySDRDevice_writeStream(sdr, txStream, (const void * const*)tx_buffs, tx_mtu, &flags, tx_time, timeoutUs);
@@ -119,11 +135,11 @@ int main(void)
             }
         }
         
-        fwrite(rx_buffer, 2 * rx_mtu * sizeof(int16_t), 1, file);
-        fwrite(tx_buffs, 2 * rx_mtu * sizeof(int16_t), 1, file1);
+        // fwrite(rx_buffer, 2 * rx_mtu * sizeof(int16_t), 1, file);
+        // fwrite(tx_buffs, 2 * rx_mtu * sizeof(int16_t), 1, file1);
     }
 
-    fclose(file);
+    // fclose(file);
 
     //stop streaming
     SoapySDRDevice_deactivateStream(sdr, rxStream, 0, 0);
@@ -138,4 +154,5 @@ int main(void)
 
     return 0;
 
+    free(samples);
 }
