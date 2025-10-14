@@ -7,7 +7,7 @@
 #include <cstring>
 #include <string.h>
 
-int16_t *read_pcm(const char *filename, size_t *sample_count, int16_t *samples)
+int16_t *read_pcm(const char *filename, size_t *sample_count)
 {
     FILE *file = fopen(filename, "rb");
     
@@ -17,7 +17,7 @@ int16_t *read_pcm(const char *filename, size_t *sample_count, int16_t *samples)
     printf("file_size = %ld\n", file_size);
     
     *sample_count = file_size / sizeof(int16_t);
-    
+    int16_t *samples = (int16_t *)malloc(file_size);
     size_t sf = fread(samples, sizeof(int16_t), *sample_count, file);
     
     if (sf == 0){
@@ -79,26 +79,32 @@ int main(void)
     int16_t tx_buff[2*tx_mtu * 10];
     int16_t rx_buffer[2*rx_mtu * 10];
 
-    int buffer_size = 1920;
-    long file_size = 3245278;
-    int16_t *samples = (int16_t *)malloc(file_size);
+    char filename[512];
+    snprintf(filename, sizeof(filename), "%s/sdr/pluto/dev/1.pcm", getenv("HOME"));
+
     size_t sample_count = 0;
-    samples = read_pcm("/home/plutoSDR/sdr/1.pcm", &sample_count, samples);
-    printf("\nКоличество сэмплов: %ld\nКоличесвто буфферов: %ld\n", sample_count, sample_count/buffer_size);
-    int16_t *tx_buffs[sample_count/buffer_size];
-    for (int i = 0; i<((int)sample_count/buffer_size); i++)
+    int16_t *samples = read_pcm(filename, &sample_count);
+    if (!samples) return 1;
+    int buffs_size = tx_mtu;
+    int buffs_count = (sample_count/buffs_size);
+    int remainder = sample_count - buffs_count * buffs_size;
+    int full_size = buffs_count + (int)(bool)remainder;
+    printf("Количество сэмплов: %ld\nКоличество буферов: %ld == %d по %d + %d\n", sample_count, full_size, buffs_count, buffs_size, remainder);
+    int16_t **tx_buffs = (int16_t **)malloc(sizeof(int16_t*) * full_size);
+    for (int i = 0; i < full_size; i++)
     {
-        memcpy(tx_buffs, samples + i * buffer_size, sizeof(int16_t)*buffer_size);
+        size_t current_size = (i == full_size - 1 && remainder > 0) ? remainder : buffs_size;
+        tx_buffs[i] = (int16_t *)malloc(sizeof(int16_t) * current_size);
+        memcpy(tx_buffs[i], samples + i * buffs_size, sizeof(int16_t)*current_size);
     }
     
-    printf("Длина буферов: %ld\n", sizeof(tx_buffs)/sizeof(int16_t));
+    printf("Длина буфера: %ld\n", sizeof(tx_buffs)/sizeof(tx_buffs[0])*full_size*sizeof(int16_t));
 
     // Количество итерация чтения из буфера
     size_t iteration_count = 10;
     long long last_time = 0;
     
-    // FILE* file = fopen("../rx.pcm", "wb");
-    // FILE* file1 = fopen("../tx.pcm", "wb");
+    FILE* file = fopen("../2.pcm", "wb");
 
     // Начинается работа с получением и отправкой сэмплов
     for (size_t buffers_read = 0; buffers_read < iteration_count; buffers_read++)
@@ -116,30 +122,23 @@ int main(void)
 
         // Переменная для времени отправки сэмплов относительно текущего приема
         long long tx_time = timeNs + (4 * 1000 * 1000); // на 4 [мс] в будущее
-
-        // // Добавляем время, когда нужно передать блок tx_buff, через tx_time -наносекунд
-        // for(size_t i = 0; i < 8; i++)
-        // {
-        //     uint8_t tx_time_byte = (tx_time >> (i * 8)) & 0xff;
-        //     tx_buff[2 + i] = tx_time_byte << 4;
-        // }
-
-        // Здесь отправляем наш tx_buff массив
         
         if( (buffers_read==2) ){
             flags = SOAPY_SDR_HAS_TIME;
-            int st = SoapySDRDevice_writeStream(sdr, txStream, (const void * const*)tx_buffs, tx_mtu, &flags, tx_time, timeoutUs);
-            if ((size_t)st != tx_mtu)
+            for (size_t b = 0; b < full_size; b++)
             {
-                printf("TX Failed: %i\n", st);
+                size_t current_size = (i == full_size - 1 && remainder > 0) ? remainder : buffs_size;
+                int st = SoapySDRDevice_writeStream(sdr, txStream, (const void * const *)&tx_buffs[b], current_size, &flags, tx_time, timeoutUs);
+                    
+                if (st < 0)
+                printf("TX Failed on buffer %zu: %i\n", b, st);
             }
         }
+        fwrite(rx_buffer, sizeof(int16_t) * sr * 2, 1, file);
         
-        // fwrite(rx_buffer, 2 * rx_mtu * sizeof(int16_t), 1, file);
-        // fwrite(tx_buffs, 2 * rx_mtu * sizeof(int16_t), 1, file1);
     }
 
-    // fclose(file);
+    fclose(file);
 
     //stop streaming
     SoapySDRDevice_deactivateStream(sdr, rxStream, 0, 0);
