@@ -3,6 +3,7 @@
 *.json
 
 !psk
+!dpsk
 
 pluto/dev/build
 .vscode
