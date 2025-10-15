@@ -43,7 +43,7 @@ int main(void){
     int buffs_count = (sample_count/buffs_size);
     int c = 0;
     int remainder = sample_count - buffs_count * buffs_size;
-    printf("Количество сэмплов: %ld\nКоличество буферов: ld == %d по %d + %d\n", sample_count, (int)(buffs_count + (int)(remainder > 0)), buffs_count, buffs_size, remainder);
+    printf("Количество сэмплов: %ld\nКоличество буферов: %d == %d по %d + %d\n", sample_count, (int)(buffs_count + (int)(remainder > 0)), buffs_count, buffs_size, remainder);
     int16_t **tx_buffs = (int16_t **)malloc(sizeof(int16_t*) * (int)(buffs_count + (int)(remainder > 0)));
     FILE* file = fopen("../../2.pcm", "wb");
     for (int i = 0; i < (buffs_count + (int)(bool)remainder); i++)

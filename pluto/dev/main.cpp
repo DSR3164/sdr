@@ -75,10 +75,6 @@ int main(void)
     size_t rx_mtu = SoapySDRDevice_getStreamMTU(sdr, rxStream);
     size_t tx_mtu = SoapySDRDevice_getStreamMTU(sdr, txStream);
 
-    // Выделяем память под буферы RX и TX
-    int16_t tx_buff[2*tx_mtu * 10];
-    int16_t rx_buffer[2*rx_mtu * 10];
-
     char filename[512];
     snprintf(filename, sizeof(filename), "%s/sdr/pluto/dev/1.pcm", getenv("HOME"));
 
@@ -90,52 +86,36 @@ int main(void)
     int remainder = sample_count - buffs_count * buffs_size;
     int full_size = buffs_count + (int)(bool)remainder;
     printf("Количество сэмплов: %ld\nКоличество буферов: %ld == %d по %d + %d\n", sample_count, full_size, buffs_count, buffs_size, remainder);
-    int16_t **tx_buffs = (int16_t **)malloc(sizeof(int16_t*) * full_size);
-    for (int i = 0; i < full_size; i++)
-    {
-        size_t current_size = (i == full_size - 1 && remainder > 0) ? remainder : buffs_size;
-        tx_buffs[i] = (int16_t *)malloc(sizeof(int16_t) * current_size);
-        memcpy(tx_buffs[i], samples + i * buffs_size, sizeof(int16_t)*current_size);
-    }
-    
-    printf("Длина буфера: %ld\n", sizeof(tx_buffs)/sizeof(tx_buffs[0])*full_size*sizeof(int16_t));
 
     // Количество итерация чтения из буфера
     size_t iteration_count = 10;
     long long last_time = 0;
     
     FILE* file = fopen("../2.pcm", "wb");
+    int16_t *rx_buffer = (int16_t *)malloc(((full_size - 1) * 1920 + remainder) * sizeof(int16_t));
 
-    // Начинается работа с получением и отправкой сэмплов
-    for (size_t buffers_read = 0; buffers_read < iteration_count; buffers_read++)
+    void *rx_buffs[] = {rx_buffer};
+    int flags;        // flags set by receive operation
+    long long timeNs; //timestamp for receive buffer
+    long timeoutUs = 1000000;
+    
+    flags = SOAPY_SDR_HAS_TIME;
+    for (size_t b = 0; b < full_size; b++)
     {
-        void *rx_buffs[] = {rx_buffer};
-        int flags;        // flags set by receive operation
-        long long timeNs; //timestamp for receive buffer
-        long timeoutUs = 1000000;
-        // считали буффер RX, записали его в rx_buffer
+        size_t current_size = (b == full_size - 1 && remainder > 0) ? remainder : buffs_size;
+        const void *one_buff = samples + b * buffs_size;
+        
         int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
         
-        // Смотрим на количество считаных сэмплов, времени прихода и разницы во времени с чтением прошлого буфера
-        printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", buffers_read, sr, flags, timeNs, (timeNs - last_time) * (last_time > 0));
-
-        // Переменная для времени отправки сэмплов относительно текущего приема
         long long tx_time = timeNs + (4 * 1000 * 1000); // на 4 [мс] в будущее
         
-        if( (buffers_read==2) ){
-            flags = SOAPY_SDR_HAS_TIME;
-            for (size_t b = 0; b < full_size; b++)
-            {
-                size_t current_size = (b == full_size - 1 && remainder > 0) ? remainder : buffs_size;
-                int st = SoapySDRDevice_writeStream(sdr, txStream, (const void * const *)&tx_buffs[b], current_size, &flags, tx_time, timeoutUs);
-                    
-                if (st < 0)
-                printf("TX Failed on buffer %zu: %i\n", b, st);
-            }
-            last_time = tx_time;
-        }
-        fwrite(rx_buffer, sizeof(int16_t) * sr * 2, 1, file);
+        int st = SoapySDRDevice_writeStream(sdr, txStream, &one_buff, current_size, &flags, tx_time, timeoutUs);
         
+        if (st < 0)
+        printf("TX Failed on buffer %zu: %i\n", b, st);
+        fwrite(rx_buffer, sizeof(int16_t) * sr, 1, file);
+        last_time = tx_time;
+        printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", b, sr, flags, timeNs, (timeNs - last_time) * (last_time > 0));
     }
 
     fclose(file);
@@ -151,7 +131,6 @@ int main(void)
     //cleanup device handle
     SoapySDRDevice_unmake(sdr);
 
-    return 0;
-
     free(samples);
+    return 0;
 }
