@@ -117,8 +117,7 @@ int main(void)
         int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
         
         // Смотрим на количество считаных сэмплов, времени прихода и разницы во времени с чтением прошлого буфера
-        printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", buffers_read, sr, flags, timeNs, timeNs - last_time);
-        last_time = timeNs;
+        printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", buffers_read, sr, flags, timeNs, (timeNs - last_time) * (last_time > 0));
 
         // Переменная для времени отправки сэмплов относительно текущего приема
         long long tx_time = timeNs + (4 * 1000 * 1000); // на 4 [мс] в будущее
@@ -127,12 +126,13 @@ int main(void)
             flags = SOAPY_SDR_HAS_TIME;
             for (size_t b = 0; b < full_size; b++)
             {
-                size_t current_size = (i == full_size - 1 && remainder > 0) ? remainder : buffs_size;
+                size_t current_size = (b == full_size - 1 && remainder > 0) ? remainder : buffs_size;
                 int st = SoapySDRDevice_writeStream(sdr, txStream, (const void * const *)&tx_buffs[b], current_size, &flags, tx_time, timeoutUs);
                     
                 if (st < 0)
                 printf("TX Failed on buffer %zu: %i\n", b, st);
             }
+            last_time = tx_time;
         }
         fwrite(rx_buffer, sizeof(int16_t) * sr * 2, 1, file);
         
