@@ -46,7 +46,7 @@ int main(void)
     SoapySDRKwargs_clear(&args);
     
     int sample_rate = 1e6;
-    int carrier_freq = 999e6;
+    int carrier_freq = 800e6;
     // Параметры RX части
     SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_RX, 0, sample_rate);
     SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, 0, carrier_freq , NULL);
@@ -59,8 +59,8 @@ int main(void)
     size_t channel = 0;
 
     // Настройки усилителей на RX\\TX
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, channel, 10.0); // Чувствительность приемника
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, channel, -50.0);// Усиление передатчика
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, channel, 40.0); // Чувствительность приемника
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, channel, -7.0);// Усиление передатчика
 
     size_t numchun = 0;
     size_t channels[] = {0};
@@ -76,7 +76,8 @@ int main(void)
     size_t tx_mtu = SoapySDRDevice_getStreamMTU(sdr, txStream);
 
     char filename[512];
-    snprintf(filename, sizeof(filename), "%s/sdr/pluto/dev/1.pcm", getenv("HOME"));
+    char pwd[] = "/home/plutoSDR";
+    snprintf(filename, sizeof(filename), "%s/sdr/pluto/dev/1.pcm", pwd);
 
     size_t sample_count = 0;
     int16_t *samples = read_pcm(filename, &sample_count);
@@ -92,28 +93,28 @@ int main(void)
     long long last_time = 0;
     
     FILE* file = fopen("../2.pcm", "wb");
-    int16_t *rx_buffer = (int16_t *)malloc(((full_size - 1) * 1920 + remainder) * sizeof(int16_t));
+    int16_t *rx_buffer = (int16_t *)malloc((rx_mtu * 2 * sizeof(int16_t)));
 
     void *rx_buffs[] = {rx_buffer};
     int flags;        // flags set by receive operation
     long long timeNs; //timestamp for receive buffer
-    long timeoutUs = 1000000;
+    long timeoutUs = 400000;
     
     flags = SOAPY_SDR_HAS_TIME;
     for (size_t b = 0; b < full_size; b++)
     {
         size_t current_size = (b == full_size - 1 && remainder > 0) ? remainder : buffs_size;
-        const void *one_buff = samples + b * buffs_size;
+        const void *one_buff = samples + b * buffs_size * 2;
         
         int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
         
         long long tx_time = timeNs + (4 * 1000 * 1000); // на 4 [мс] в будущее
         
-        int st = SoapySDRDevice_writeStream(sdr, txStream, &one_buff, current_size, &flags, tx_time, timeoutUs);
+        int st = SoapySDRDevice_writeStream(sdr, txStream, &one_buff, tx_mtu, &flags, tx_time, timeoutUs);
         
         if (st < 0)
         printf("TX Failed on buffer %zu: %i\n", b, st);
-        fwrite(rx_buffer, sizeof(int16_t) * sr, 1, file);
+        fwrite(rx_buffer, 2 * rx_mtu * sizeof(int16_t), 1, file);
         last_time = tx_time;
         printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", b, sr, flags, timeNs, (timeNs - last_time) * (last_time > 0));
     }
