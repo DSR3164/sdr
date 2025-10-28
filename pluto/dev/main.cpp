@@ -30,6 +30,18 @@ cp *upsample(cp symbols[], int len, cp *upsampled_symbols){
     }
 }
 
+int *filter(cp *samples, int len, int *signal)
+{
+    int b[len] = {1};
+    for(int N = 0; N < len-1; N++)
+    {
+        for(int m = 0; m < N; m++)
+        {
+            signal[m] = samples[N].real();
+        }
+    }
+}
+
 int16_t *read_pcm(const char *filename, size_t *sample_count)
 {
     FILE *file = fopen(filename, "rb");
