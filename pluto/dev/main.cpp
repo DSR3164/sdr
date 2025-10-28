@@ -6,6 +6,29 @@
 #include <complex.h>
 #include <cstring>
 #include <string.h>
+#include <random>
+#include <iostream>
+
+using namespace std;
+using cp = complex<double>;
+
+cp *mapper_b(int bits[], int len, cp *symbols){
+    for (int i = 0; i < len; i++) {
+        cp q(bits[i] * (-2.0) + 1.0, 0.0);
+        symbols[i] = q;
+    }
+}
+
+cp *upsample(cp symbols[], int len, cp *upsampled_symbols){
+    int uplen = len * 10;
+    printf("UPlen = %d", uplen);
+    for (int i = 0; i < uplen-1; i++)
+    {
+        cp q(0,0);
+        upsampled_symbols[i] = q;
+        if (i == 0 || i%10==0)upsampled_symbols[i] = symbols[(int)i/10];
+    }
+}
 
 int16_t *read_pcm(const char *filename, size_t *sample_count)
 {
@@ -75,6 +98,31 @@ int main(void)
     size_t rx_mtu = SoapySDRDevice_getStreamMTU(sdr, rxStream);
     size_t tx_mtu = SoapySDRDevice_getStreamMTU(sdr, txStream);
 
+    int bits[10] = {1, 0, 0, 1, 1, 1, 1, 0, 1, 1};
+    int len_bits = sizeof(bits)/sizeof(int);
+
+    cp *symbols = (cp *)malloc(sizeof(cp) * len_bits);
+    cp *upsampled = (cp *)malloc(sizeof(cp) * len_bits * 10);
+    
+    mapper_b(bits, len_bits, symbols);
+    upsample(symbols, len_bits*10, upsampled);
+    
+    printf("Symbols: ");
+    fflush(stdout);
+    for (int i = 0; i < len_bits; i++){
+        cout << symbols[i].real() << " + j" << symbols[i].imag() << ", ";
+    }
+    
+    cout << endl;
+
+    printf("Upsampled Symbols:\n");
+    fflush(stdout);
+    for (int i = 0; i < len_bits*10; i++){
+        cout << upsampled[i].real() << " + j" << upsampled[i].imag() << endl;
+    }
+    
+    cout << endl;
+
     char filename[512];
     char pwd[] = "/home/plutoSDR";
     snprintf(filename, sizeof(filename), "%s/sdr/pluto/dev/1.pcm", pwd);
@@ -86,7 +134,7 @@ int main(void)
     int buffs_count = (sample_count/buffs_size);
     int remainder = sample_count - buffs_count * buffs_size;
     int full_size = buffs_count + (int)(bool)remainder;
-    printf("Количество сэмплов: %ld\nКоличество буферов: %ld == %d по %d + %d\n", sample_count, full_size, buffs_count, buffs_size, remainder);
+    printf("Количество сэмплов: %ld\nКоличество буферов: %d == %d по %d + %d\n", sample_count, full_size, buffs_count, buffs_size, remainder);
 
     // Количество итерация чтения из буфера
     size_t iteration_count = 10;
@@ -116,7 +164,7 @@ int main(void)
         printf("TX Failed on buffer %zu: %i\n", b, st);
         fwrite(rx_buffer, 2 * rx_mtu * sizeof(int16_t), 1, file);
         last_time = tx_time;
-        printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", b, sr, flags, timeNs, (timeNs - last_time) * (last_time > 0));
+        // printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", b, sr, flags, timeNs, (timeNs - last_time) * (last_time > 0));
     }
 
     fclose(file);
