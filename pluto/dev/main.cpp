@@ -12,33 +12,36 @@
 using namespace std;
 using cp = complex<double>;
 
-cp *mapper_b(int bits[], int len, cp *symbols){
-    for (int i = 0; i < len; i++) {
-        cp q(bits[i] * (-2.0) + 1.0, 0.0);
-        symbols[i] = q;
-    }
-}
-
-cp *upsample(cp symbols[], int len, cp *upsampled_symbols){
-    int uplen = len * 10;
-    printf("UPlen = %d", uplen);
-    for (int i = 0; i < uplen-1; i++)
-    {
-        cp q(0,0);
-        upsampled_symbols[i] = q;
-        if (i == 0 || i%10==0)upsampled_symbols[i] = symbols[(int)i/10];
-    }
-}
-
-int *filter(cp *samples, int len, int *signal)
+void mapper_b(const vector<int> &bits, vector<cp> &symbols)
 {
-    int b[len] = {1};
-    for(int N = 0; N < len-1; N++)
+    for (size_t i = 0; i < bits.size(); ++i)
+        symbols[i] = cp(bits[i] * -2.0 + 1.0, 0.0);
+}
+
+void upsample(const vector<cp> &symbols, vector<cp> &upsampled, int up = 10)
+{
+    fill(upsampled.begin(), upsampled.end(), cp(0, 0));
+
+    for (size_t i = 0; i < symbols.size(); ++i)
+        upsampled[i * up] = symbols[i];
+}
+
+void filter(const vector<cp> &x, const vector<double> &b, vector<int> &y)
+{
+    const int nb = b.size();
+    const int nx = x.size();
+
+    y.assign(nx, 0);
+
+    for (int n = 0; n < nx; ++n)
     {
-        for(int m = 0; m < N; m++)
+        int acc = 0;
+        for (int m = 0; m < nb; ++m)
         {
-            signal[m] = samples[N].real();
+            if (n - m >= 0)
+                acc += x[n - m].real() * b[m];
         }
+        y[n] = acc;
     }
 }
 
@@ -110,30 +113,16 @@ int main(void)
     size_t rx_mtu = SoapySDRDevice_getStreamMTU(sdr, rxStream);
     size_t tx_mtu = SoapySDRDevice_getStreamMTU(sdr, txStream);
 
-    int bits[10] = {1, 0, 0, 1, 1, 1, 1, 0, 1, 1};
-    int len_bits = sizeof(bits)/sizeof(int);
+    vector<int> bits = {1, 0, 0, 1, 1, 1, 1, 0, 1, 1};
+    const int up = 10;
+    vector<cp> symbols(bits.size());
+    vector<cp> upsampled(bits.size() * up);
+    vector<int> signal(bits.size() * up);
 
-    cp *symbols = (cp *)malloc(sizeof(cp) * len_bits);
-    cp *upsampled = (cp *)malloc(sizeof(cp) * len_bits * 10);
-    
-    mapper_b(bits, len_bits, symbols);
-    upsample(symbols, len_bits*10, upsampled);
-    
-    printf("Symbols: ");
-    fflush(stdout);
-    for (int i = 0; i < len_bits; i++){
-        cout << symbols[i].real() << " + j" << symbols[i].imag() << ", ";
-    }
-    
-    cout << endl;
-
-    printf("Upsampled Symbols:\n");
-    fflush(stdout);
-    for (int i = 0; i < len_bits*10; i++){
-        cout << upsampled[i].real() << " + j" << upsampled[i].imag() << endl;
-    }
-    
-    cout << endl;
+    mapper_b(bits, symbols);
+    upsample(symbols, upsampled, up);
+    vector<double> b(5, 1.0);
+    filter(upsampled, b, signal);
 
     char filename[512];
     char pwd[] = "/home/plutoSDR";
