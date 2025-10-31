@@ -26,20 +26,20 @@ void upsample(const vector<cp> &symbols, vector<cp> &upsampled, int up = 10)
         upsampled[i * up] = symbols[i];
 }
 
-void filter(const vector<cp> &x, const vector<double> &b, vector<int> &y)
+void filter(const vector<cp> &a, const vector<double> &b, vector<int> &y)
 {
     const int nb = b.size();
-    const int nx = x.size();
+    const int na = a.size();
 
-    y.assign(nx, 0);
+    y.assign(na, 0);
 
-    for (int n = 0; n < nx; ++n)
+    for (int n = 0; n < na; ++n)
     {
         int acc = 0;
         for (int m = 0; m < nb; ++m)
         {
             if (n - m >= 0)
-                acc += x[n - m].real() * b[m];
+                acc += a[n - m].real() * b[m];
         }
         y[n] = acc;
     }
@@ -48,7 +48,10 @@ void filter(const vector<cp> &x, const vector<double> &b, vector<int> &y)
 int16_t *read_pcm(const char *filename, size_t *sample_count)
 {
     FILE *file = fopen(filename, "rb");
-    
+    if(!file) {
+        printf("Ошибка чтения файла\n");
+        return NULL;
+    }
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
@@ -113,7 +116,7 @@ int main(void)
     size_t rx_mtu = SoapySDRDevice_getStreamMTU(sdr, rxStream);
     size_t tx_mtu = SoapySDRDevice_getStreamMTU(sdr, txStream);
 
-    vector<int> bits = {1, 0, 0, 1, 1, 1, 1, 0, 1, 1};
+    vector<int> bits = {1, 0, 0, 1, 0, 1, 0, 0, 1, 0};
     const int up = 10;
     vector<cp> symbols(bits.size());
     vector<cp> upsampled(bits.size() * up);
@@ -123,49 +126,66 @@ int main(void)
     upsample(symbols, upsampled, up);
     vector<double> b(5, 1.0);
     filter(upsampled, b, signal);
-
+    vector<int> buffer(signal.size()*2);
+    for (int i = 0; i < buffer.size() ; i+=2) {
+        buffer[i] = signal[i/2];
+        buffer[i+1] = (int16_t)0;
+    }
+    const void *buffs[] = {buffer.data()}; // Буфер для передачи сэмплов
+    
     char filename[512];
-    char pwd[] = "/home/plutoSDR";
+    char pwd[] = "/home/excalibur/code";
+
     snprintf(filename, sizeof(filename), "%s/sdr/pluto/dev/1.pcm", pwd);
 
-    size_t sample_count = 0;
-    int16_t *samples = read_pcm(filename, &sample_count);
-    if (!samples) return 1;
-    int buffs_size = tx_mtu;
-    int buffs_count = (sample_count/buffs_size);
-    int remainder = sample_count - buffs_count * buffs_size;
-    int full_size = buffs_count + (int)(bool)remainder;
-    printf("Количество сэмплов: %ld\nКоличество буферов: %d == %d по %d + %d\n", sample_count, full_size, buffs_count, buffs_size, remainder);
+    // size_t sample_count = 0;
+    // int16_t *samples = read_pcm(filename, &sample_count);
+    // if (!samples) return 1;
+    // int buffs_size = tx_mtu;
+    // int buffs_count = (sample_count/buffs_size);
+    // int remainder = sample_count - buffs_count * buffs_size;
+    // int full_size = buffs_count + (int)(bool)remainder;
+    // printf("Количество сэмплов: %ld\nКоличество буферов: %d == %d по %d + %d\n", sample_count, full_size, buffs_count, buffs_size, remainder);
 
     // Количество итерация чтения из буфера
     size_t iteration_count = 10;
     long long last_time = 0;
     
-    FILE* file = fopen("../2.pcm", "wb");
-    int16_t *rx_buffer = (int16_t *)malloc((rx_mtu * 2 * sizeof(int16_t)));
+    char filename_out[512];
+    printf("Введите имя выходного файла: ");
+    scanf("%511s", filename_out);
 
-    void *rx_buffs[] = {rx_buffer};
+    char fullpath[1024];
+    snprintf(fullpath, sizeof(fullpath), "%s/sdr/pluto/dev/%s.pcm", pwd, filename_out);
+
+    printf("Output file: %s\n", fullpath);
+    FILE* file = fopen(fullpath, "wb");
+    // int16_t *rx_buffer = (int16_t *)malloc((rx_mtu * 2 * sizeof(int16_t)));
+    vector<int16_t> rx_vec(buffer.size());
+
+    void *rx_buffs[] = {rx_vec.data()}; // Буфер для приема сэмплов
     int flags;        // flags set by receive operation
     long long timeNs; //timestamp for receive buffer
     long timeoutUs = 400000;
-    
     flags = SOAPY_SDR_HAS_TIME;
-    for (size_t b = 0; b < full_size; b++)
+    for (size_t b = 0; b < 10; b++)
     {
-        size_t current_size = (b == full_size - 1 && remainder > 0) ? remainder : buffs_size;
-        const void *one_buff = samples + b * buffs_size * 2;
+        // size_t current_size = (b == full_size - 1 && remainder > 0) ? remainder : buffs_size;
+        // const void *one_buff = samples + b * buffs_size * 2;
         
-        int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
+        int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_vec.size(), &flags, &timeNs, timeoutUs);
         
         long long tx_time = timeNs + (4 * 1000 * 1000); // на 4 [мс] в будущее
-        
-        int st = SoapySDRDevice_writeStream(sdr, txStream, &one_buff, tx_mtu, &flags, tx_time, timeoutUs);
-        
-        if (st < 0)
-        printf("TX Failed on buffer %zu: %i\n", b, st);
-        fwrite(rx_buffer, 2 * rx_mtu * sizeof(int16_t), 1, file);
+        if (b == 3)
+        {
+            int st = SoapySDRDevice_writeStream(sdr, txStream, buffs, tx_mtu, &flags, tx_time, timeoutUs);
+            
+            if (st < 0)
+            printf("TX Failed on buffer %zu: %i\n", b, st);
+            printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", b, sr, flags, timeNs, (timeNs - last_time) * (last_time > 0));
+        }
+        fwrite(rx_vec.data(), 2 * sr * sizeof(int16_t), 1, file);
         last_time = tx_time;
-        // printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", b, sr, flags, timeNs, (timeNs - last_time) * (last_time > 0));
     }
 
     fclose(file);
@@ -181,6 +201,6 @@ int main(void)
     //cleanup device handle
     SoapySDRDevice_unmake(sdr);
 
-    free(samples);
+    // free(samples);
     return 0;
 }
