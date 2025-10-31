@@ -102,20 +102,22 @@ int16_t *read_pcm(const char *filename, size_t *sample_count)
 tuple<SoapySDRDevice *, SoapySDRStream *, SoapySDRStream *, size_t, size_t> init(int sample_rate = 1e6, int carrier_freq = 800e6, bool usb_or_ip = 1)
 {
     SoapySDRKwargs args = {};
-    SoapySDRKwargs_set(&args, "driver", "plutosdr"); // Set driver to plutosdr
-    if (usb_or_ip)
-    {
-        SoapySDRKwargs_set(&args, "uri", "usb:"); // USB
+    SoapySDRKwargs_set(&args, "driver", "plutosdr");
+    if (usb_or_ip) {
+        SoapySDRKwargs_set(&args, "uri", "usb:");
+    } else {
+        SoapySDRKwargs_set(&args, "uri", "ip:192.168.2.1");
     }
-    else
-    {
-        SoapySDRKwargs_set(&args, "uri", "ip:192.168.2.1"); // IP
-    }
-    SoapySDRKwargs_set(&args, "direct", "1");             // Direct RX/TX mode
-    SoapySDRKwargs_set(&args, "timestamp_every", "1920"); // Buffer size in samples and timestamping
-    SoapySDRKwargs_set(&args, "loopback", "0");           // Antanna loopback mode off
-    SoapySDRDevice *sdr = SoapySDRDevice_make(&args);     // Init device
+    SoapySDRKwargs_set(&args, "direct", "1");
+    SoapySDRKwargs_set(&args, "timestamp_every", "1920");
+    SoapySDRKwargs_set(&args, "loopback", "0");
+    SoapySDRDevice *sdr = SoapySDRDevice_make(&args);
     SoapySDRKwargs_clear(&args);
+
+    if (!sdr) {
+        printf("No device found!\n");
+        return make_tuple(nullptr, nullptr, nullptr, 0, 0);
+    }
 
     // RX parameters
     SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_RX, 0, sample_rate);
@@ -188,7 +190,7 @@ int main(void)
     auto [sdr, rxStream, txStream, rx_mtu, tx_mtu] = init();
     if (!sdr)
     {
-        printf("Ошибка инициализации PlutoSDR!\n");
+        printf("Initialization error\n");
         return -1;
     }
 
