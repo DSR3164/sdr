@@ -27,6 +27,22 @@ void mapper_b(const vector<int> &bits, vector<cp> &symbols)
         symbols[i] = cp(bits[i] * -2.0 + 1.0, 0.0);
 }
 
+void mapper_q(const vector<int> &bits, vector<cp> &symbols)
+{
+    /*
+    Map input bits to QPSK symbols and store them in 'symbols'.
+    'bits' is the input vector of bits (0s and 1s).
+    'symbols' is the output vector of complex symbols.
+    00 -> +1 + 1j
+    01 -> +1 - 1j
+    10 -> -1 + 1j
+    11 -> -1 - 1j
+    */
+
+    for (size_t i = 0; i < symbols.size(); ++i)
+        symbols[i] = cp(bits[2*i] * -2.0 + 1.0, bits[2*i + 1] * -2.0 + 1.0);
+}
+
 void upsample(const vector<cp> &symbols, vector<cp> &upsampled, int up = 10)
 {
     /*
@@ -70,6 +86,87 @@ void filter(const vector<cp> &a, const vector<double> &b, vector<int> &y)
         }
         y[n] = acc;
     }
+}
+
+void filter_q(const vector<cp> &a, const vector<double> &b, vector<int> &y)
+{
+    /*
+    Convolve input signal 'a' with filter coefficients 'b' and store the result in 'y'.
+    'a' is a vector of complex samples.
+    'b' is a vector of filter coefficients (real numbers), constant 1 in our case.
+    'y' is the output vector of integers (filtered signal).
+    */
+    const int nb = b.size();
+    const int na = a.size();
+
+    y.assign(na, 0);
+
+    for (int n = 0; n < na; ++n)
+    {
+        int acc = 0;
+        for (int m = 0; m < nb; ++m)
+        {
+            if (n - m >= 0)
+                acc += a[n - m].imag() * b[m];
+        }
+        y[n] = acc;
+    }
+}
+
+tuple<const void **, void **> bpsk(vector<int> &bits)
+{
+    const int up = 10;
+    vector<cp> symbols(bits.size());
+    vector<cp> upsampled(bits.size() * up);
+    vector<int> signal(bits.size() * up);
+    vector<double> b(10, 1.0);
+
+    mapper_b(bits, symbols);
+    upsample(symbols, upsampled, up);
+    filter(upsampled, b, signal);
+
+    vector<int16_t> buffer(signal.size() * 2);
+    vector<int16_t> rx_vec(1920 * 2);
+
+    for (int i = 0; i < (int)buffer.size(); i += 2)
+    {
+        buffer[i] = signal[i / 2];
+        buffer[i + 1] = 0;
+    }
+
+    static const void *tx_buffs[] = {buffer.data()}; // Buffer for transmitting samples
+    static void *rx_buffs[] = {rx_vec.data()};       // Buffer for receiving samples
+
+    return make_tuple(tx_buffs, rx_buffs);
+}
+
+tuple<const void **, void **> qpsk(vector<int> &bits)
+{
+    const int up = 10;
+    vector<cp> symbols(bits.size()/2);
+    vector<cp> upsampled(symbols.size() * up);
+    vector<int> signal_i(symbols.size() * up);
+    vector<int> signal_q(symbols.size() * up);
+    vector<double> b(10, 1.0);
+
+    mapper_q(bits, symbols);
+    upsample(symbols, upsampled, up);
+    filter(upsampled, b, signal_i);
+    filter_q(upsampled, b, signal_q);
+
+    vector<int16_t> buffer(signal_i.size() * 2);
+    vector<int16_t> rx_vec(1920 * 2);
+
+    for (int i = 0; i < (int)buffer.size(); i += 2)
+    {
+        buffer[i] = signal_i[i / 2];
+        buffer[i + 1] = signal_q[i / 2];
+    }
+
+    static const void *tx_buffs[] = {buffer.data()}; // Buffer for transmitting samples
+    static void *rx_buffs[] = {rx_vec.data()};       // Buffer for receiving samples
+
+    return make_tuple(tx_buffs, rx_buffs);
 }
 
 int16_t *read_pcm(const char *filename, size_t *sample_count)
@@ -194,28 +291,9 @@ int main(void)
         return -1;
     }
 
-    const int up = 10;
     vector<int> bits = {1, 0, 0, 1, 0, 1, 0, 0, 1, 0};
-    vector<cp> symbols(bits.size());
-    vector<cp> upsampled(bits.size() * up);
-    vector<int> signal(bits.size() * up);
-    vector<double> b(5, 1.0);
-
-    mapper_b(bits, symbols);
-    upsample(symbols, upsampled, up);
-    filter(upsampled, b, signal);
-
-    vector<int16_t> buffer(signal.size() * 2);
-    vector<int16_t> rx_vec(rx_mtu * 2);
-
-    for (int i = 0; i < (int)buffer.size(); i += 2)
-    {
-        buffer[i] = signal[i / 2] << 2;
-        buffer[i + 1] = 0 << 2;
-    }
-
-    const void *tx_buffs[] = {buffer.data()}; // Buffer for transmitting samples
-    void *rx_buffs[] = {rx_vec.data()};       // Buffer for receiving samples
+    auto [bpsk_tx_buffs, bpsk_rx_buffs] = bpsk(bits);
+    auto [qpsk_tx_buffs, qpsk_rx_buffs] = qpsk(bits);
 
     FILE *output_file = output_pcm();
 
@@ -227,18 +305,18 @@ int main(void)
 
     for (size_t b = 0; b < 10; b++)
     {
-        int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
+        int sr = SoapySDRDevice_readStream(sdr, rxStream, bpsk_rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
 
         long long tx_time = timeNs + (4 * 1000 * 1000); // Schedule TX 4ms ahead
         if (b == 3)
         {
-            int st = SoapySDRDevice_writeStream(sdr, txStream, tx_buffs, tx_mtu, &flags, tx_time, timeoutUs);
+            int st = SoapySDRDevice_writeStream(sdr, txStream, bpsk_tx_buffs, tx_mtu, &flags, tx_time, timeoutUs);
 
             if (st < 0)
                 printf("TX Failed on buffer %zu: %i\n", b, st);
             printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", b, sr, flags, timeNs, (timeNs - last_time) * (last_time > 0));
         }
-        fwrite(rx_vec.data(), 2 * sr * sizeof(int16_t), 1, output_file);
+        fwrite(bpsk_rx_buffs[0], 2 * sr * sizeof(int16_t), 1, output_file);
         last_time = tx_time;
     }
 
