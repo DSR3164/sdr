@@ -1,7 +1,7 @@
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
-#include <stdio.h>            
-#include <stdlib.h>           
+#include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <complex.h>
 #include <cstring>
@@ -40,7 +40,7 @@ void mapper_q(const vector<int> &bits, vector<cp> &symbols)
     */
 
     for (size_t i = 0; i < symbols.size(); ++i)
-        symbols[i] = cp(bits[2*i] * -2.0 + 1.0, bits[2*i + 1] * -2.0 + 1.0);
+        symbols[i] = cp(bits[2 * i] * -2.0 + 1.0, bits[2 * i + 1] * -2.0 + 1.0);
 }
 
 void upsample(const vector<cp> &symbols, vector<cp> &upsampled, int up = 10)
@@ -143,7 +143,7 @@ tuple<const void **, void **> bpsk(vector<int> &bits)
 tuple<const void **, void **> qpsk(vector<int> &bits)
 {
     const int up = 10;
-    vector<cp> symbols(bits.size()/2);
+    vector<cp> symbols(bits.size() / 2);
     vector<cp> upsampled(symbols.size() * up);
     vector<int> signal_i(symbols.size() * up);
     vector<int> signal_q(symbols.size() * up);
@@ -200,9 +200,12 @@ tuple<SoapySDRDevice *, SoapySDRStream *, SoapySDRStream *, size_t, size_t> init
 {
     SoapySDRKwargs args = {};
     SoapySDRKwargs_set(&args, "driver", "plutosdr");
-    if (usb_or_ip) {
+    if (usb_or_ip)
+    {
         SoapySDRKwargs_set(&args, "uri", "usb:");
-    } else {
+    }
+    else
+    {
         SoapySDRKwargs_set(&args, "uri", "ip:192.168.2.1");
     }
     SoapySDRKwargs_set(&args, "direct", "1");
@@ -211,7 +214,8 @@ tuple<SoapySDRDevice *, SoapySDRStream *, SoapySDRStream *, size_t, size_t> init
     SoapySDRDevice *sdr = SoapySDRDevice_make(&args);
     SoapySDRKwargs_clear(&args);
 
-    if (!sdr) {
+    if (!sdr)
+    {
         printf("No device found!\n");
         return make_tuple(nullptr, nullptr, nullptr, 0, 0);
     }
