@@ -11,7 +11,7 @@ bash install.sh
 
 Сборка
 ```bash
-cd dev
+cd pluto/dev
 mkdir build
 cd build
 cmake ../
