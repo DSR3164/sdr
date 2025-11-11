@@ -8,6 +8,9 @@
 #include <string.h>
 #include <random>
 #include <iostream>
+#include <vector>
+#include <tuple>
+#include <malloc.h>
 
 using namespace std;
 using cp = complex<double>;
@@ -113,60 +116,45 @@ void filter_q(const vector<cp> &a, const vector<double> &b, vector<int> &y)
     }
 }
 
-tuple<const void **, void **> bpsk(vector<int> &bits)
+void bpsk(vector<int> &bits, vector<int16_t> &buffer)
 {
-    const int up = 10;
+    const int up = 100;
     vector<cp> symbols(bits.size());
     vector<cp> upsampled(bits.size() * up);
     vector<int> signal(bits.size() * up);
-    vector<double> b(10, 1.0);
+    vector<double> b(100, 1.0);
 
     mapper_b(bits, symbols);
     upsample(symbols, upsampled, up);
     filter(upsampled, b, signal);
 
-    vector<int16_t> buffer(signal.size() * 2);
-    vector<int16_t> rx_vec(1920 * 2);
-
     for (int i = 0; i < (int)buffer.size(); i += 2)
     {
-        buffer[i] = signal[i / 2];
+        buffer[i] = (i <= signal.size()) ? ((signal[i / 2] * 1000) << 4) : 0;
         buffer[i + 1] = 0;
     }
-
-    static const void *tx_buffs[] = {buffer.data()}; // Buffer for transmitting samples
-    static void *rx_buffs[] = {rx_vec.data()};       // Buffer for receiving samples
-
-    return make_tuple(tx_buffs, rx_buffs);
 }
 
-tuple<const void **, void **> qpsk(vector<int> &bits)
+void qpsk(vector<int> &bits, vector<int16_t> &buffer)
 {
-    const int up = 10;
+    const int up = 100;
     vector<cp> symbols(bits.size() / 2);
     vector<cp> upsampled(symbols.size() * up);
     vector<int> signal_i(symbols.size() * up);
     vector<int> signal_q(symbols.size() * up);
-    vector<double> b(10, 1.0);
+    vector<double> b(100, 1.0);
 
     mapper_q(bits, symbols);
     upsample(symbols, upsampled, up);
     filter(upsampled, b, signal_i);
     filter_q(upsampled, b, signal_q);
 
-    vector<int16_t> buffer(signal_i.size() * 2);
-    vector<int16_t> rx_vec(1920 * 2);
-
+    int size = signal_i.size();
     for (int i = 0; i < (int)buffer.size(); i += 2)
     {
-        buffer[i] = signal_i[i / 2];
-        buffer[i + 1] = signal_q[i / 2];
+        buffer[i] = i <= size ? ((signal_i[i / 2] * 1000) << 4) : 0;
+        buffer[i + 1] = i <= size ? ((signal_q[i / 2] * 1000) << 4) : 0;
     }
-
-    static const void *tx_buffs[] = {buffer.data()}; // Buffer for transmitting samples
-    static void *rx_buffs[] = {rx_vec.data()};       // Buffer for receiving samples
-
-    return make_tuple(tx_buffs, rx_buffs);
 }
 
 int16_t *read_pcm(const char *filename, size_t *sample_count)
@@ -180,7 +168,7 @@ int16_t *read_pcm(const char *filename, size_t *sample_count)
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
-    printf("file_size = %ld\n", file_size);
+    printf("file_size = %ld\n", file_size); 
 
     *sample_count = file_size / sizeof(int16_t);
     int16_t *samples = (int16_t *)malloc(file_size);
@@ -274,7 +262,7 @@ FILE *output_pcm()
     if (getenv("USER") && strcmp(getenv("USER"), "excalibur") == 0)
         strcpy(repo_path, "/home/excalibur/code");
     else if (getenv("HOME"))
-        strcpy(repo_path, getenv("HOME"));
+        strcpy(repo_path, "/home/plutoSDR");
 
     printf("Введите имя выходного файла: ");
     scanf("%63s", filename_out);
@@ -295,11 +283,28 @@ int main(void)
         return -1;
     }
 
-    vector<int> bits = {1, 0, 0, 1, 0, 1, 0, 0, 1, 0};
-    auto [bpsk_tx_buffs, bpsk_rx_buffs] = bpsk(bits);
-    auto [qpsk_tx_buffs, qpsk_rx_buffs] = qpsk(bits);
+    vector<int> bits = {1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1,};
 
-    FILE *output_file = output_pcm();
+    vector<int16_t> qpsk_tx_buffer(1920*2);
+    vector<int16_t> bpsk_tx_buffer(1920*2);
+    vector<int16_t> rx_buffer(1920*2);
+
+    bpsk(bits, bpsk_tx_buffer);
+    qpsk(bits, qpsk_tx_buffer);
+
+    for(size_t i = 0; i < 2; i++)
+    {
+        qpsk_tx_buffer[0 + i] = 0xffff;
+        // 8 x timestamp words
+        qpsk_tx_buffer[10 + i] = 0xffff;
+    }
+
+    void *tx_buffs[] = {qpsk_tx_buffer.data()}; // Buffer for transmitting samples
+    void *rx_buffs[] = {rx_buffer.data()}; // Buffer for transmitting samples
+
+    // FILE *output_file = output_pcm();
+    FILE *file_tx = fopen("/home/plutoSDR/sdr/pluto/dev/tx1.pcm", "wb");
+    FILE *file_rx = fopen("/home/plutoSDR/sdr/pluto/dev/rx1.pcm", "wb");
 
     int flags;
     long long timeNs;
@@ -307,24 +312,29 @@ int main(void)
     long timeoutUs = 400000;
     flags = SOAPY_SDR_HAS_TIME;
 
-    for (size_t b = 0; b < 10; b++)
+    
+    fwrite(tx_buffs[0], 2 * rx_mtu * sizeof(int16_t), 1, file_tx);
+    cout << bpsk_tx_buffer.size() << endl;
+
+    for (size_t b = 0; b < 4; b++)
     {
-        int sr = SoapySDRDevice_readStream(sdr, rxStream, bpsk_rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
+        int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
 
         long long tx_time = timeNs + (4 * 1000 * 1000); // Schedule TX 4ms ahead
-        if (b == 3)
+        if (b == 0)
         {
-            int st = SoapySDRDevice_writeStream(sdr, txStream, bpsk_tx_buffs, tx_mtu, &flags, tx_time, timeoutUs);
+            int st = SoapySDRDevice_writeStream(sdr, txStream, (const void * const*)tx_buffs, tx_mtu, &flags, tx_time, timeoutUs);
 
             if (st < 0)
                 printf("TX Failed on buffer %zu: %i\n", b, st);
             printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", b, sr, flags, timeNs, (timeNs - last_time) * (last_time > 0));
         }
-        fwrite(bpsk_rx_buffs[0], 2 * sr * sizeof(int16_t), 1, output_file);
+        fwrite(rx_buffs[0], 2 * rx_mtu * sizeof(int16_t), 1, file_rx);
         last_time = tx_time;
     }
 
-    fclose(output_file);
+    fclose(file_rx);
+    fclose(file_tx);
     deinit(sdr, rxStream, txStream);
     return 0;
 }
