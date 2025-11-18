@@ -1,34 +1,18 @@
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <complex.h>
-#include <cstring>
-#include <string.h>
-#include <random>
 #include <iostream>
+#include <complex>
+#include <cstdint>
+#include <cstdlib>
+#include <cstdio>
+#include <random>
 #include <vector>
 #include <tuple>
-#include <malloc.h>
+#include <ctime>
 
 using namespace std;
 using cp = complex<double>;
 using ci = complex<int16_t>;
-
-void mapper_b(const vector<int> &bits, vector<cp> &symbols)
-{
-    /*
-    Map input bits to BPSK symbols and store them in 'symbols'.
-    'bits' is the input vector of bits (0s and 1s).
-    'symbols' is the output vector of complex symbols.
-    0 -> +1 + 0j
-    1 -> -1 + 0j
-    */
-
-    for (size_t i = 0; i < bits.size(); ++i)
-        symbols[i] = cp(bits[i] * -2.0 + 1.0, 0.0);
-}
 
 void mapper_q(const vector<int> &bits, vector<cp> &symbols)
 {
@@ -63,10 +47,12 @@ void upsample(const vector<cp> &symbols, vector<cp> &upsampled, int up = 10)
     fill(upsampled.begin(), upsampled.end(), cp(0, 0));
 
     for (size_t i = 0; i < symbols.size(); ++i)
+    {
         upsampled[i * up] = symbols[i];
+    }
 }
 
-void filter(const vector<cp> &a, const vector<double> &b, vector<int> &y)
+void filter_i(const vector<cp> &a, const vector<double> &b, vector<int> &y)
 {
     /*
     Convolve input signal 'a' with filter coefficients 'b' and store the result in 'y'.
@@ -116,41 +102,29 @@ void filter_q(const vector<cp> &a, const vector<double> &b, vector<int> &y)
     }
 }
 
-void bpsk(vector<int> &bits, vector<int16_t> &buffer)
-{
-    const int up = 100;
-    vector<cp> symbols(bits.size());
-    vector<cp> upsampled(bits.size() * up);
-    vector<int> signal(bits.size() * up);
-    vector<double> b(100, 1.0);
-
-    mapper_b(bits, symbols);
-    upsample(symbols, upsampled, up);
-    filter(upsampled, b, signal);
-
-    for (int i = 0; i < (int)buffer.size(); i += 2)
-    {
-        buffer[i] = (i <= signal.size()) ? ((signal[i / 2] * 1000) << 4) : 0;
-        buffer[i + 1] = 0;
-    }
-}
-
 void qpsk(vector<int> &bits, vector<int16_t> &buffer)
 {
-    const int up = 100;
+    const int up = 10;
     vector<cp> symbols(bits.size() / 2);
     vector<cp> upsampled(symbols.size() * up);
     vector<int> signal_i(symbols.size() * up);
     vector<int> signal_q(symbols.size() * up);
-    vector<double> b(100, 1.0);
+    vector<double> b(up, 1.0);
 
     mapper_q(bits, symbols);
     upsample(symbols, upsampled, up);
-    filter(upsampled, b, signal_i);
+    filter_i(upsampled, b, signal_i);
     filter_q(upsampled, b, signal_q);
+    for (size_t i = 0; i < signal_q.size(); ++i)
+    {
+        if (((signal_i[i] * signal_i[i]) != 1) || ((signal_q[i] * signal_q[i]) != 1))
+        {
+            cout << "\nошибка в сигнале\n"; break;
+        }
+    }
 
-    int size = signal_i.size();
-    for (int i = 0; i < (int)buffer.size(); i += 2)
+    size_t size = signal_i.size();
+    for (size_t i = 0; i < buffer.size(); i += 2)
     {
         buffer[i] = i <= size ? ((signal_i[i / 2] * 1000) << 4) : 0;
         buffer[i + 1] = i <= size ? ((signal_q[i / 2] * 1000) << 4) : 0;
@@ -184,7 +158,7 @@ int16_t *read_pcm(const char *filename, size_t *sample_count)
     return samples;
 }
 
-tuple<SoapySDRDevice *, SoapySDRStream *, SoapySDRStream *, size_t, size_t> init(int sample_rate = 1e6, int carrier_freq = 800e6, bool usb_or_ip = 1)
+tuple<SoapySDRDevice *, SoapySDRStream *, SoapySDRStream *, size_t, size_t> init(int sample_rate = 1e6, int carrier_freq = 870e6, bool usb_or_ip = 1)
 {
     SoapySDRKwargs args = {};
     SoapySDRKwargs_set(&args, "driver", "plutosdr");
@@ -253,26 +227,6 @@ void deinit(SoapySDRDevice *sdr, SoapySDRStream *rxStream, SoapySDRStream *txStr
     SoapySDRDevice_unmake(sdr);
 }
 
-FILE *output_pcm()
-{
-    char repo_path[128];
-    char fullpath[1024];
-    char filename_out[64];
-
-    if (getenv("USER") && strcmp(getenv("USER"), "excalibur") == 0)
-        strcpy(repo_path, "/home/excalibur/code");
-    else if (getenv("HOME"))
-        strcpy(repo_path, "/home/plutoSDR");
-
-    printf("Введите имя выходного файла: ");
-    scanf("%63s", filename_out);
-    snprintf(fullpath, sizeof(fullpath), "%s/sdr/pluto/dev/%s.pcm", repo_path, filename_out);
-    printf("Output file: %s\n", fullpath);
-
-    FILE *file = fopen(fullpath, "wb");
-    return file;
-}
-
 int main(void)
 {
 
@@ -283,13 +237,16 @@ int main(void)
         return -1;
     }
 
-    vector<int> bits = {1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1,};
+    int N = 1920;
+    vector<int> bits(N);
 
+    for(int i = 0; i < N; ++i)
+    {
+        bits[i] = rand() % 2;
+    }
     vector<int16_t> qpsk_tx_buffer(1920*2);
-    vector<int16_t> bpsk_tx_buffer(1920*2);
     vector<int16_t> rx_buffer(1920*2);
 
-    bpsk(bits, bpsk_tx_buffer);
     qpsk(bits, qpsk_tx_buffer);
 
     for(size_t i = 0; i < 2; i++)
@@ -302,7 +259,6 @@ int main(void)
     void *tx_buffs[] = {qpsk_tx_buffer.data()}; // Buffer for transmitting samples
     void *rx_buffs[] = {rx_buffer.data()}; // Buffer for transmitting samples
 
-    // FILE *output_file = output_pcm();
     FILE *file_tx = fopen("/home/plutoSDR/sdr/pluto/dev/tx1.pcm", "wb");
     FILE *file_rx = fopen("/home/plutoSDR/sdr/pluto/dev/rx1.pcm", "wb");
 
@@ -312,9 +268,7 @@ int main(void)
     long timeoutUs = 400000;
     flags = SOAPY_SDR_HAS_TIME;
 
-    
     fwrite(tx_buffs[0], 2 * rx_mtu * sizeof(int16_t), 1, file_tx);
-    cout << bpsk_tx_buffer.size() << endl;
 
     for (size_t b = 0; b < 4; b++)
     {
