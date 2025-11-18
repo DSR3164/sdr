@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-rx = np.fromfile(f"/home/excalibur/code/sdr/pluto/dev/filter2.pcm", dtype=np.int16)
+rx = np.fromfile(f"/home/plutoSDR/sdr/pluto/dev/rx1.pcm", dtype=np.int16)
 
 samples = []
 
