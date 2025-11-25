@@ -158,7 +158,7 @@ int16_t *read_pcm(const char *filename, size_t *sample_count)
     return samples;
 }
 
-tuple<SoapySDRDevice *, SoapySDRStream *, SoapySDRStream *, size_t, size_t> init(int sample_rate = 1e6, int carrier_freq = 870e6, bool usb_or_ip = 1)
+tuple<SoapySDRDevice *, SoapySDRStream *, SoapySDRStream *, size_t, size_t> init(int sample_rate = 1e6, int carrier_freq = 807e6, bool usb_or_ip = 1)
 {
     SoapySDRKwargs args = {};
     SoapySDRKwargs_set(&args, "driver", "plutosdr");
