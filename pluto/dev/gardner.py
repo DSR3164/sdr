@@ -3,14 +3,16 @@ import numpy as np
 
 def gardner(complex_symbols_after_convolve):
     SPS = 10 # Samples per symbol
-    K1 = 0; K2 = 0; p1 = 0; p2 = 0; e = 0; offset = 0; Kp = 1
+    K1 = 0; K2 = 0; p1 = 0; p2 = 0; e = 0; offset = 0; Kp = 4
     BnTs = 0.01; 
     zeta = np.sqrt(2)/2
     teta = ((BnTs)/10)/(zeta + 1/(4*zeta))
     K1 = (-4*zeta*teta)/((1 + 2*zeta*teta + teta**2)*Kp)
     K2 = (-4*teta**2)/((1 + 2*zeta*teta + teta**2)*Kp)
     s = complex_symbols_after_convolve
-    s = s[4080:6009]
+    plt.plot(s)
+    plt.show()
+    s = s[169250:171800]
     offset_list = []
     err_list = []
     mean_err = []
@@ -37,7 +39,7 @@ def gardner(complex_symbols_after_convolve):
 
     return offset, offset_list, err_list, mean_err
 
-rx = np.fromfile(f"/home/plutoSDR/sdr/pluto/dev/rx1.pcm", dtype=np.int16)
+rx = np.fromfile(f"/home/plutoSDR/sdr/pluto/dev/sdr_to_sdr.pcm", dtype=np.int16)
 samples_rx = []
 
 for x in range(0, len(rx), 2):
@@ -49,12 +51,11 @@ pila = np.convolve(samples_rx, a)
 
 offset, offset_list, err_list, mean_err = gardner(pila)
 signal = []
-for x in range(offset, len(pila), 10):
-    signal.append(pila[x])
+for x in range(0, len(offset_list)-1):
+    signal.append(offset_list[x] + 10*x)
 
 signal = np.array(signal)
-mask = np.abs(signal) >= 0.05
-signal = signal[mask]
+signal = pila[signal]
 
 print(offset)
 
@@ -68,7 +69,7 @@ plt.axvline()
 
 plt.subplot(2,1,2)
 plt.title("Сигнал после согласованного фильтра")
-plt.xlim([5, 192])
+# plt.xlim([5, 192])
 plt.ylim([-3, 3])
 plt.plot(np.arange(len(np.real(signal))), np.real(signal)/10)
 plt.plot(np.arange(len(np.imag(signal))), np.imag(signal)/10)

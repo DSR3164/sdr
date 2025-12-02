@@ -9,6 +9,7 @@
 #include <vector>
 #include <tuple>
 #include <ctime>
+#include <cstring>
 
 using namespace std;
 using cp = complex<double>;
@@ -158,13 +159,13 @@ int16_t *read_pcm(const char *filename, size_t *sample_count)
     return samples;
 }
 
-tuple<SoapySDRDevice *, SoapySDRStream *, SoapySDRStream *, size_t, size_t> init(int sample_rate = 1e6, int carrier_freq = 807e6, bool usb_or_ip = 1)
+tuple<SoapySDRDevice *, SoapySDRStream *, SoapySDRStream *, size_t, size_t> init(const char usb[], int sample_rate = 1e6, int carrier_freq = 807e6, bool usb_or_ip = 1)
 {
     SoapySDRKwargs args = {};
     SoapySDRKwargs_set(&args, "driver", "plutosdr");
     if (usb_or_ip)
     {
-        SoapySDRKwargs_set(&args, "uri", "usb:");
+        SoapySDRKwargs_set(&args, "uri", usb);
     }
     else
     {
@@ -194,8 +195,8 @@ tuple<SoapySDRDevice *, SoapySDRStream *, SoapySDRStream *, size_t, size_t> init
     size_t channel = 0;
 
     // Configure the gain settings for the receiver and transmitter
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, channel, 40.0); // RX sensitivity
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, channel, -7.0); // TX power
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, channel, 50.0); // RX sensitivity
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, channel, -3.0); // TX power
 
     size_t numchun = 0;
     size_t channels[] = {0};
@@ -227,10 +228,10 @@ void deinit(SoapySDRDevice *sdr, SoapySDRStream *rxStream, SoapySDRStream *txStr
     SoapySDRDevice_unmake(sdr);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
 
-    auto [sdr, rxStream, txStream, rx_mtu, tx_mtu] = init();
+    auto [sdr, rxStream, txStream, rx_mtu, tx_mtu] = init(argv[1]);
     if (!sdr)
     {
         printf("Initialization error\n");
@@ -258,9 +259,15 @@ int main(void)
 
     void *tx_buffs[] = {qpsk_tx_buffer.data()}; // Buffer for transmitting samples
     void *rx_buffs[] = {rx_buffer.data()}; // Buffer for transmitting samples
-
+    FILE *file_rx;
+    if (strcmp(argv[1], "usb:1.17.5")){
+        file_rx = fopen("/home/plutoSDR/sdr/pluto/dev/rx1.pcm", "wb");
+    }
+    else
+    {
+        file_rx = fopen("/home/plutoSDR/sdr/pluto/dev/rx.pcm", "wb");
+    }
     FILE *file_tx = fopen("/home/plutoSDR/sdr/pluto/dev/tx1.pcm", "wb");
-    FILE *file_rx = fopen("/home/plutoSDR/sdr/pluto/dev/rx1.pcm", "wb");
 
     int flags;
     long long timeNs;
@@ -270,21 +277,26 @@ int main(void)
 
     fwrite(tx_buffs[0], 2 * rx_mtu * sizeof(int16_t), 1, file_tx);
 
-    for (size_t b = 0; b < 4; b++)
+    int k = 150;
+
+    while (k > 1)
     {
-        int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
-
+        
         long long tx_time = timeNs + (4 * 1000 * 1000); // Schedule TX 4ms ahead
-        if (b == 0)
-        {
-            int st = SoapySDRDevice_writeStream(sdr, txStream, (const void * const*)tx_buffs, tx_mtu, &flags, tx_time, timeoutUs);
-
-            if (st < 0)
-                printf("TX Failed on buffer %zu: %i\n", b, st);
-            printf("Buffer: %lu - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", b, sr, flags, timeNs, (timeNs - last_time) * (last_time > 0));
+        
+        if (strcmp(argv[1], "usb:1.17.5")){
+            int sr = SoapySDRDevice_readStream(sdr, rxStream, rx_buffs, rx_mtu, &flags, &timeNs, timeoutUs);
+            fwrite(rx_buffs[0], 2 * rx_mtu * sizeof(int16_t), 1, file_rx);
         }
-        fwrite(rx_buffs[0], 2 * rx_mtu * sizeof(int16_t), 1, file_rx);
+        else{
+            if (k > 147){
+                int st = SoapySDRDevice_writeStream(sdr, txStream, (const void * const*)tx_buffs, tx_mtu, &flags, tx_time, timeoutUs);
+            }
+        }
+
+        printf("Flags: %i, Time: %lli, TimeDiff: %lli\n", flags, timeNs, (timeNs - last_time) * (last_time > 0));
         last_time = tx_time;
+        k-=1;
     }
 
     fclose(file_rx);
