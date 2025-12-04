@@ -88,7 +88,7 @@ void filter_q(const vector<cp> &a, const vector<double> &b, vector<int> &y)
     }
 }
 
-void qpsk(vector<int> &bits, vector<int16_t> &buffer)
+void qpsk(vector<int> &bits, vector<int16_t> &buffer, bool timestamp)
 {
     const int up = 10;
     vector<cp> symbols(bits.size() / 2);
@@ -105,7 +105,8 @@ void qpsk(vector<int> &bits, vector<int16_t> &buffer)
     {
         if (((signal_i[i] * signal_i[i]) != 1) || ((signal_q[i] * signal_q[i]) != 1))
         {
-            cout << "\nошибка в сигнале\n"; break;
+            cout << "\nошибка в сигнале\n";
+            break;
         }
     }
 
@@ -114,6 +115,15 @@ void qpsk(vector<int> &bits, vector<int16_t> &buffer)
     {
         buffer[i] = i <= size ? ((signal_i[i / 2] * 1000) << 4) : 0;
         buffer[i + 1] = i <= size ? ((signal_q[i / 2] * 1000) << 4) : 0;
+    }
+
+    if (timestamp)
+    {
+        for (size_t i = 0; i < 2; i++) // Insert Timestamp
+        {
+            buffer[0 + i] = 0xffff;
+            buffer[10 + i] = 0xffff;
+        }
     }
 }
 
@@ -128,7 +138,7 @@ int16_t *read_pcm(const char *filename, size_t *sample_count)
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
-    printf("file_size = %ld\n", file_size); 
+    printf("file_size = %ld\n", file_size);
 
     *sample_count = file_size / sizeof(int16_t);
     int16_t *samples = (int16_t *)malloc(file_size);
@@ -144,71 +154,65 @@ int16_t *read_pcm(const char *filename, size_t *sample_count)
     return samples;
 }
 
-tuple<SoapySDRDevice *, SoapySDRStream *, SoapySDRStream *, size_t, size_t> init(const char usb[], int sample_rate, int carrier_freq, bool usb_or_ip)
+int init(sdr_config_t *config)
 {
+    char buffer_size[10]; // Allocate enough space
+    snprintf(buffer_size, sizeof(buffer_size), "%d", config->buffer_size);
     SoapySDRKwargs args = {};
     SoapySDRKwargs_set(&args, "driver", "plutosdr");
-    if (usb_or_ip)
-    {
-        SoapySDRKwargs_set(&args, "uri", usb);
-    }
-    else
-    {
-        SoapySDRKwargs_set(&args, "uri", "ip:192.168.2.1");
-    }
+    SoapySDRKwargs_set(&args, "uri", config->name);
     SoapySDRKwargs_set(&args, "direct", "1");
-    SoapySDRKwargs_set(&args, "timestamp_every", "1920");
+    SoapySDRKwargs_set(&args, "timestamp_every", buffer_size);
     SoapySDRKwargs_set(&args, "loopback", "0");
-    SoapySDRDevice *sdr = SoapySDRDevice_make(&args);
+    config->sdr = SoapySDRDevice_make(&args);
     SoapySDRKwargs_clear(&args);
+    SoapySDRDevice *sdr = config->sdr;
 
     if (!sdr)
     {
         printf("No device found!\n");
-        return make_tuple(nullptr, nullptr, nullptr, 0, 0);
+        return 1;
     }
 
     // RX parameters
-    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_RX, 0, sample_rate);
-    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, 0, carrier_freq, NULL);
+    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_RX, 0, config->rx_sample_rate);
+    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, 0, config->rx_carrier_freq, NULL);
 
     // TX parameters
-    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_TX, 0, sample_rate);
-    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_TX, 0, carrier_freq, NULL);
+    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_TX, 0, config->tx_sample_rate);
+    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_TX, 0, config->tx_carrier_freq, NULL);
 
     // Initialize channel count for RX\TX (in AdalmPluto it is one, zero)
     size_t channel = 0;
 
     // Configure the gain settings for the receiver and transmitter
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, channel, 50.0); // RX sensitivity
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, channel, -3.0); // TX power
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, channel, config->rx_gain); // RX sensitivity
+    SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, channel, config->tx_gain); // TX power
 
     size_t numchun = 0;
     size_t channels[] = {0};
     // Forming streams for transmitting and receiving samples
-    SoapySDRStream *rxStream = SoapySDRDevice_setupStream(sdr, SOAPY_SDR_RX, SOAPY_SDR_CS16, channels, numchun, NULL);
-    SoapySDRStream *txStream = SoapySDRDevice_setupStream(sdr, SOAPY_SDR_TX, SOAPY_SDR_CS16, channels, numchun, NULL);
+    config->rxStream = SoapySDRDevice_setupStream(sdr, SOAPY_SDR_RX, SOAPY_SDR_CS16, channels, numchun, NULL);
+    config->txStream = SoapySDRDevice_setupStream(sdr, SOAPY_SDR_TX, SOAPY_SDR_CS16, channels, numchun, NULL);
+    SoapySDRStream *rxStream = config->rxStream;
+    SoapySDRStream *txStream = config->txStream;
 
     SoapySDRDevice_activateStream(sdr, rxStream, 0, 0, 0); // start streaming
     SoapySDRDevice_activateStream(sdr, txStream, 0, 0, 0); // start streaming
-
-    // Get the MTU (Maximum Transmission Unit), in our case - the size of the buffers.
-    size_t rx_mtu = SoapySDRDevice_getStreamMTU(sdr, rxStream);
-    size_t tx_mtu = SoapySDRDevice_getStreamMTU(sdr, txStream);
-
-    return make_tuple(sdr, rxStream, txStream, rx_mtu, tx_mtu);
+    return 0;
 }
 
-void deinit(SoapySDRDevice *sdr, SoapySDRStream *rxStream, SoapySDRStream *txStream)
+int deinit(sdr_config_t *config)
 {
     // stop streaming
-    SoapySDRDevice_deactivateStream(sdr, rxStream, 0, 0);
-    SoapySDRDevice_deactivateStream(sdr, txStream, 0, 0);
+    SoapySDRDevice_deactivateStream(config->sdr, config->rxStream, 0, 0);
+    SoapySDRDevice_deactivateStream(config->sdr, config->txStream, 0, 0);
 
     // shutdown the stream
-    SoapySDRDevice_closeStream(sdr, rxStream);
-    SoapySDRDevice_closeStream(sdr, txStream);
+    SoapySDRDevice_closeStream(config->sdr, config->rxStream);
+    SoapySDRDevice_closeStream(config->sdr, config->txStream);
 
     // cleanup device handle
-    SoapySDRDevice_unmake(sdr);
+    SoapySDRDevice_unmake(config->sdr);
+    return 0;
 }
