@@ -2,12 +2,12 @@
 
 int main(int argc, char *argv[])
 {
-
+    (void)argc;
     sdr_config_t sdr1(
-        argv[1], 1920,
+        argv[2], 1920,
         1e6, 1e6,
         800e6, 800e6,
-        50.0, -7.0);
+        40.0, -7.0);
 
     if (init(&sdr1) != 0)
     {
@@ -27,10 +27,11 @@ int main(int argc, char *argv[])
 
     qpsk(bits, qpsk_tx_buffer);
 
+
     void *tx_buffs[] = {qpsk_tx_buffer.data()}; // Buffer for transmitting samples
     void *rx_buffs[] = {rx_buffer.data()};      // Buffer for transmitting samples
     FILE *file_rx;
-    if (strcmp(argv[1], "usb:1.17.5"))
+    if (strcmp(argv[1], argv[2]) == 0)
     {
         file_rx = fopen("/home/plutoSDR/sdr/pluto/dev/rx1.pcm", "wb");
     }
@@ -56,21 +57,20 @@ int main(int argc, char *argv[])
 
         long long tx_time = timeNs + (4 * 1000 * 1000); // Schedule TX 4ms ahead
 
-        if (strcmp(argv[1], "usb:1.17.5"))
+        if (strcmp(argv[1], argv[2]) == 0)
         {
             sr = SoapySDRDevice_readStream(sdr1.sdr, sdr1.rxStream, rx_buffs, sdr1.buffer_size, &flags, &timeNs, timeoutUs);
             fwrite(rx_buffs[0], 2 * sr * sizeof(int16_t), 1, file_rx);
         }
         else
         {
-            if (k > 147)
+            if (k > 10)
             {
                 st = SoapySDRDevice_writeStream(sdr1.sdr, sdr1.txStream, (const void *const *)tx_buffs, sdr1.buffer_size, &flags, tx_time, timeoutUs);
                 (void)st;
             }
         }
 
-        printf("Buffer: %u - Samples: %i, Flags: %i, Time: %lli, TimeDiff: %lli\n", k, sr, flags, timeNs, (timeNs - last_time) * (last_time > 0));
         last_time = tx_time;
         k -= 1;
     }
