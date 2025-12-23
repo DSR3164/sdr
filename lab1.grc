@@ -42,7 +42,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [160, 72.0]
+    coordinate: [176, 76.0]
     rotation: 0
     state: enabled
 - name: samp_rate
@@ -54,7 +54,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [160, 8.0]
+    coordinate: [176, 12.0]
     rotation: 0
     state: enabled
 - name: tune
@@ -67,15 +67,15 @@ blocks:
     orient: QtCore.Qt.Horizontal
     rangeType: float
     start: 700.7*1e6
-    step: 0.0125*1e6
+    step: 0.0125*1e3
     stop: 907.1*1e6
-    value: 807.2*1e6
+    value: 734.750*1e6
     widget: counter_slider
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [248, 8.0]
+    coordinate: [304, 12.0]
     rotation: 0
     state: enabled
 - name: analog_wfm_rcv_0
@@ -112,6 +112,51 @@ blocks:
     coordinate: [752, 104.0]
     rotation: 0
     state: enabled
+- name: digital_costas_loop_cc_0
+  id: digital_costas_loop_cc
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    order: '4'
+    use_snr: 'False'
+    w: '0.005'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [856, 448.0]
+    rotation: 0
+    state: true
+- name: digital_symbol_sync_xx_0
+  id: digital_symbol_sync_xx
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    constellation: digital.constellation_bpsk().base()
+    damping: '1.0'
+    loop_bw: '0.045'
+    max_dev: '1.5'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    nfilters: '128'
+    osps: '1'
+    pfb_mf_taps: '[]'
+    resamp_type: digital.IR_MMSE_8TAP
+    sps: '10'
+    ted_gain: '1.0'
+    ted_type: digital.TED_GARDNER
+    type: cc
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [480, 436.0]
+    rotation: 0
+    state: true
 - name: iio_pluto_source_0
   id: iio_pluto_source
   parameters:
@@ -119,16 +164,16 @@ blocks:
     alias: ''
     bandwidth: '20000000'
     bbdc: 'True'
-    buffer_size: '32768'
+    buffer_size: 32768*4
     comment: ''
     filter: ''
     filter_source: '''Auto'''
     fpass: '0'
     frequency: int(tune)
     fstop: '0'
-    gain1: '''slow_attack'''
+    gain1: '''manual'''
     len_tag_key: packet_len
-    manual_gain1: '64'
+    manual_gain1: '65'
     maxoutbuf: '0'
     minoutbuf: '0'
     quadrature: 'True'
@@ -143,8 +188,8 @@ blocks:
     coordinate: [8, 180.0]
     rotation: 0
     state: enabled
-- name: qtgui_freq_sink_x_0_0
-  id: qtgui_freq_sink_x
+- name: qtgui_const_sink_x_0
+  id: qtgui_const_sink_x
   parameters:
     affinity: ''
     alias: ''
@@ -159,50 +204,60 @@ blocks:
     alpha8: '1.0'
     alpha9: '1.0'
     autoscale: 'False'
-    average: '1.0'
     axislabels: 'True'
-    bw: samp_rate
     color1: '"blue"'
-    color10: '"dark blue"'
+    color10: '"red"'
     color2: '"red"'
-    color3: '"green"'
-    color4: '"black"'
-    color5: '"cyan"'
-    color6: '"magenta"'
-    color7: '"yellow"'
-    color8: '"dark red"'
-    color9: '"dark green"'
+    color3: '"red"'
+    color4: '"red"'
+    color5: '"red"'
+    color6: '"red"'
+    color7: '"red"'
+    color8: '"red"'
+    color9: '"red"'
     comment: ''
-    ctrlpanel: 'False'
-    fc: tune
-    fftsize: '1024'
-    freqhalf: 'True'
-    grid: 'False'
+    grid: 'True'
     gui_hint: ''
-    label: Relative Gain
     label1: ''
-    label10: ''''''
-    label2: ''''''
-    label3: ''''''
-    label4: ''''''
-    label5: ''''''
-    label6: ''''''
-    label7: ''''''
-    label8: ''''''
-    label9: ''''''
+    label10: ''
+    label2: ''
+    label3: ''
+    label4: ''
+    label5: ''
+    label6: ''
+    label7: ''
+    label8: ''
+    label9: ''
     legend: 'True'
-    maxoutbuf: '0'
-    minoutbuf: '0'
+    marker1: '0'
+    marker10: '0'
+    marker2: '0'
+    marker3: '0'
+    marker4: '0'
+    marker5: '0'
+    marker6: '0'
+    marker7: '0'
+    marker8: '0'
+    marker9: '0'
     name: '""'
     nconnections: '1'
-    norm_window: 'False'
-    showports: 'False'
+    size: '2048'
+    style1: '0'
+    style10: '0'
+    style2: '0'
+    style3: '0'
+    style4: '0'
+    style5: '0'
+    style6: '0'
+    style7: '0'
+    style8: '0'
+    style9: '0'
     tr_chan: '0'
     tr_level: '0.0'
     tr_mode: qtgui.TRIG_MODE_FREE
+    tr_slope: qtgui.TRIG_SLOPE_POS
     tr_tag: '""'
     type: complex
-    units: dB
     update_time: '0.10'
     width1: '1'
     width10: '1'
@@ -214,16 +269,17 @@ blocks:
     width7: '1'
     width8: '1'
     width9: '1'
-    wintype: window.WIN_BLACKMAN_hARRIS
-    ymax: '10'
-    ymin: '-140'
+    xmax: '2'
+    xmin: '-2'
+    ymax: '2'
+    ymin: '-2'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [280, 344.0]
+    coordinate: [1168, 404.0]
     rotation: 0
-    state: enabled
+    state: true
 - name: qtgui_freq_sink_x_0_0_0
   id: qtgui_freq_sink_x
   parameters:
@@ -405,11 +461,12 @@ blocks:
 
 connections:
 - [analog_wfm_rcv_0, '0', audio_sink_0, '0']
+- [digital_costas_loop_cc_0, '0', qtgui_const_sink_x_0, '0']
+- [digital_symbol_sync_xx_0, '0', digital_costas_loop_cc_0, '0']
 - [iio_pluto_source_0, '0', analog_wfm_rcv_0, '0']
-- [iio_pluto_source_0, '0', qtgui_freq_sink_x_0_0, '0']
+- [iio_pluto_source_0, '0', digital_symbol_sync_xx_0, '0']
 - [iio_pluto_source_0, '0', qtgui_freq_sink_x_0_0_0, '0']
 - [iio_pluto_source_0, '0', qtgui_time_sink_x_0, '0']
 
 metadata:
   file_format: 1
-  grc_version: 3.10.12.0
