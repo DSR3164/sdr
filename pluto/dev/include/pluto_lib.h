@@ -1,3 +1,4 @@
+#pragma once
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 #include <iostream>
@@ -13,17 +14,16 @@
 
 using namespace std;
 using cp = complex<double>;
-using ci = complex<int16_t>;
 
 typedef struct sdr_config_s
 {
   char *name; // USB:V... or IP
   int buffer_size;
-  int tx_sample_rate;
-  int rx_sample_rate;
+  double tx_sample_rate;
+  double rx_sample_rate;
 
-  int tx_carrier_freq;
-  int rx_carrier_freq;
+  double tx_carrier_freq;
+  double rx_carrier_freq;
 
   float tx_gain;
   float rx_gain;
@@ -33,8 +33,8 @@ typedef struct sdr_config_s
   SoapySDRStream *rxStream;
   SoapySDRStream *txStream;
 
-  sdr_config_s(char *name, int buf, int tx_sr, int rx_sr,
-               int tx_f, int rx_f, float tx_g, float rx_g)
+  sdr_config_s(char *name, int buf, double tx_sr, double rx_sr,
+               double tx_f, double rx_f, float tx_g, float rx_g)
       : name(name),
         buffer_size(buf),
         tx_sample_rate(tx_sr),
@@ -53,9 +53,19 @@ typedef struct sdr_config_s
 
 int init(sdr_config_t *config);
 int deinit(sdr_config_t *config);
-void mapper_q(const vector<int> &bits, vector<cp> &symbols);
+void bpsk_mapper(const vector<int> &bits, vector<cp> &symbols);
+void qpsk_mapper(const vector<int> &bits, vector<cp> &symbols);
+void bpsk_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols);
+void qpsk_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols);
+void qam16_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols);
 void upsample(const vector<cp> &symbols, vector<cp> &upsampled, int up = 10);
-void filter_i(const vector<cp> &a, const vector<double> &b, vector<int> &y);
-void filter_q(const vector<cp> &a, const vector<double> &b, vector<int> &y);
-void qpsk(vector<int> &bits, vector<int16_t> &buffer, bool timestamp = false);
+void filter_i(const vector<cp> &a, const vector<double> &b, vector<double> &y);
+void filter_q(const vector<cp> &a, const vector<double> &b, vector<double> &y);
+void bpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp = false, int sps = 10);
+void qpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp = false, int sps = 10);
+void bpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps = 10);
+void qpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps = 10);
+void qam16_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps = 10);
+void implement_barker(vector<int16_t> &symbols, int sps = 10);
+void gen_bits(int N, vector<int> &bits);
 int16_t *read_pcm(const char *filename, size_t *sample_count);

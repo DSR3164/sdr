@@ -1,6 +1,42 @@
 #include "pluto_lib.h"
 
-void mapper_q(const vector<int> &bits, vector<cp> &symbols)
+void bpsk_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols)
+{
+    for (size_t i = 0; i < symbols.size(); ++i)
+        symbols[i] = cp(bits[i] * -2.0 + 1.0, bits[i] * -2.0 + 1.0) / sqrt(2);
+}
+
+void qpsk_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols)
+{
+    for (size_t i = 0; i < symbols.size(); ++i)
+        symbols[i] = cp(bits[2 * i] * -2.0 + 1.0, bits[2 * i + 1] * -2.0 + 1.0) / sqrt(2.0);
+}
+
+void qam16_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols)
+{
+    for (size_t i = 0; i < symbols.size(); ++i)
+        symbols[i] = cp((1 - 2 * bits[4 * i + 0]) * (2 - (1 - 2 * bits[4 * i + 2])),
+                        (1 - 2 * bits[4 * i + 1]) * (2 - (1 - 2 * bits[4 * i + 3]))) /
+                     sqrt(10.0);
+}
+
+void bpsk_mapper(const vector<int> &bits, vector<cp> &symbols)
+{
+    /*
+    Map input bits to QPSK symbols and store them in 'symbols'.
+    'bits' is the input vector of bits (0s and 1s).
+    'symbols' is the output vector of complex symbols.
+    00 -> +1 + 1j
+    01 -> +1 - 1j
+    10 -> -1 + 1j
+    11 -> -1 - 1j
+    */
+
+    for (size_t i = 0; i < symbols.size(); ++i)
+        symbols[i] = cp(bits[i] * -2.0 + 1.0, bits[i] * -2.0 + 1.0);
+}
+
+void qpsk_mapper(const vector<int> &bits, vector<cp> &symbols)
 {
     /*
     Map input bits to QPSK symbols and store them in 'symbols'.
@@ -38,7 +74,7 @@ void upsample(const vector<cp> &symbols, vector<cp> &upsampled, int up)
     }
 }
 
-void filter_i(const vector<cp> &a, const vector<double> &b, vector<int> &y)
+void filter_i(const vector<cp> &a, const vector<double> &b, vector<double> &y)
 {
     /*
     Convolve input signal 'a' with filter coefficients 'b' and store the result in 'y'.
@@ -53,7 +89,7 @@ void filter_i(const vector<cp> &a, const vector<double> &b, vector<int> &y)
 
     for (int n = 0; n < na; ++n)
     {
-        int acc = 0;
+        double acc = 0;
         for (int m = 0; m < nb; ++m)
         {
             if (n - m >= 0)
@@ -63,7 +99,7 @@ void filter_i(const vector<cp> &a, const vector<double> &b, vector<int> &y)
     }
 }
 
-void filter_q(const vector<cp> &a, const vector<double> &b, vector<int> &y)
+void filter_q(const vector<cp> &a, const vector<double> &b, vector<double> &y)
 {
     /*
     Convolve input signal 'a' with filter coefficients 'b' and store the result in 'y'.
@@ -78,7 +114,7 @@ void filter_q(const vector<cp> &a, const vector<double> &b, vector<int> &y)
 
     for (int n = 0; n < na; ++n)
     {
-        int acc = 0;
+        double acc = 0;
         for (int m = 0; m < nb; ++m)
         {
             if (n - m >= 0)
@@ -88,17 +124,45 @@ void filter_q(const vector<cp> &a, const vector<double> &b, vector<int> &y)
     }
 }
 
-void qpsk(vector<int> &bits, vector<int16_t> &buffer, bool timestamp)
+void bpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
 {
-    const int up = 10;
-    vector<cp> symbols(bits.size() / 2);
-    vector<cp> upsampled(symbols.size() * up);
-    vector<int> signal_i(symbols.size() * up);
-    vector<int> signal_q(symbols.size() * up);
-    vector<double> b(up, 1.0);
+    vector<cp> symbols(bits.size());
+    vector<cp> upsampled(symbols.size() * sps);
+    vector<double> signal_i(symbols.size() * sps);
+    vector<double> signal_q(symbols.size() * sps);
+    vector<double> b(sps, 1.0);
 
-    mapper_q(bits, symbols);
-    upsample(symbols, upsampled, up);
+    bpsk_mapper(bits, symbols);
+    upsample(symbols, upsampled, sps);
+    filter_i(upsampled, b, signal_i);
+
+    size_t size = signal_i.size();
+    for (size_t i = 0; i < size; ++i)
+    {
+        buffer[2 * i] = (i <= size) ? ((signal_i[i] * 16000)) : 0;
+        buffer[2 * i + 1] = (i <= size) ? ((signal_i[i] * 16000)) : 0;
+    }
+
+    if (timestamp)
+    {
+        for (size_t i = 0; i < 2; i++) // Insert Timestamp
+        {
+            buffer[0 + i] = 0xffff;
+            buffer[10 + i] = 0xffff;
+        }
+    }
+}
+
+void qpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
+{
+    vector<cp> symbols(bits.size() / 2);
+    vector<cp> upsampled(symbols.size() * sps);
+    vector<double> signal_i(symbols.size() * sps);
+    vector<double> signal_q(symbols.size() * sps);
+    vector<double> b(sps, 1.0);
+
+    qpsk_mapper(bits, symbols);
+    upsample(symbols, upsampled, sps);
     filter_i(upsampled, b, signal_i);
     filter_q(upsampled, b, signal_q);
     for (size_t i = 0; i < signal_q.size(); ++i)
@@ -113,8 +177,8 @@ void qpsk(vector<int> &bits, vector<int16_t> &buffer, bool timestamp)
     size_t size = signal_i.size();
     for (size_t i = 0; i < buffer.size(); i += 2)
     {
-        buffer[i] = i <= size ? ((signal_i[i / 2] * 1000) << 4) : 0;
-        buffer[i + 1] = i <= size ? ((signal_q[i / 2] * 1000) << 4) : 0;
+        buffer[i] = (i <= size) ? ((signal_i[i / 2] * 16000)) : 0;
+        buffer[i + 1] = (i <= size) ? ((signal_q[i / 2] * 16000)) : 0;
     }
 
     if (timestamp)
@@ -125,6 +189,115 @@ void qpsk(vector<int> &bits, vector<int16_t> &buffer, bool timestamp)
             buffer[10 + i] = 0xffff;
         }
     }
+}
+
+void bpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
+{
+    vector<cp> symbols(bits.size() / 2);
+    vector<cp> upsampled(symbols.size() * sps);
+    vector<double> signal_i(symbols.size() * sps);
+    vector<double> signal_q(symbols.size() * sps);
+    vector<double> b(sps, 1.0);
+
+    bpsk_mapper_3gpp(bits, symbols);
+    upsample(symbols, upsampled, sps);
+    filter_i(upsampled, b, signal_i);
+    filter_q(upsampled, b, signal_q);
+
+    size_t size = signal_i.size();
+    for (size_t i = 0; i < buffer.size(); i += 2)
+    {
+        buffer[i] = (i <= size) ? ((signal_i[i / 2] * 16000)) : 0;
+        buffer[i + 1] = (i <= size) ? ((signal_q[i / 2] * 16000)) : 0;
+    }
+
+    if (timestamp)
+    {
+        for (size_t i = 0; i < 2; i++) // Insert Timestamp
+        {
+            buffer[0 + i] = 0xffff;
+            buffer[10 + i] = 0xffff;
+        }
+    }
+}
+
+void qpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
+{
+    vector<cp> symbols(bits.size() / 2);
+    vector<cp> upsampled(symbols.size() * sps);
+    vector<double> signal_i(symbols.size() * sps);
+    vector<double> signal_q(symbols.size() * sps);
+    vector<double> b(sps, 1.0);
+
+    qpsk_mapper_3gpp(bits, symbols);
+    upsample(symbols, upsampled, sps);
+    filter_i(upsampled, b, signal_i);
+    filter_q(upsampled, b, signal_q);
+
+    size_t size = signal_i.size();
+    for (size_t i = 0; i < (symbols.size() * sps); i += 2)
+    {
+        buffer[i] = (int16_t)(signal_i[i / 2] * 16000);
+        buffer[i + 1] = (int16_t)(signal_q[i / 2] * 16000);
+    }
+
+    if (timestamp)
+    {
+        for (size_t i = 0; i < 2; i++) // Insert Timestamp
+        {
+            buffer[0 + i] = 0xffff;
+            buffer[10 + i] = 0xffff;
+        }
+    }
+}
+
+void qam16_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
+{
+    vector<cp> symbols(bits.size() / 4);
+    vector<cp> upsampled(symbols.size() * sps);
+    vector<double> signal_i(symbols.size() * sps);
+    vector<double> signal_q(symbols.size() * sps);
+    vector<double> b(sps, 1.0);
+
+    qam16_mapper_3gpp(bits, symbols);
+    upsample(symbols, upsampled, sps);
+    filter_i(upsampled, b, signal_i);
+    filter_q(upsampled, b, signal_q);
+
+    size_t size = signal_i.size();
+    for (size_t i = 0; i < buffer.size(); i += 2)
+    {
+        buffer[i] = (i <= size) ? ((signal_i[i / 2] * 16000)) : 0;
+        buffer[i + 1] = (i <= size) ? ((signal_q[i / 2] * 16000)) : 0;
+    }
+
+    if (timestamp)
+    {
+        for (size_t i = 0; i < 2; i++) // Insert Timestamp
+        {
+            buffer[0 + i] = 0xffff;
+            buffer[10 + i] = 0xffff;
+        }
+    }
+}
+
+void implement_barker(vector<int16_t> &symbols, int sps)
+{
+    cout << "Len of buff: " << symbols.size() << endl;
+    cout << "Start implementing. . ." << endl;
+    vector<int> barker = {0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0};
+    vector<int16_t> out(barker.size() * sps * 2);
+    bpsk(barker, out, false);
+    cout << "Size of out: " << out.size() << endl;
+    for (int i = 0; i < (int)out.size(); ++i)
+        symbols[i + 12] = out[i];
+}
+
+void gen_bits(int N, vector<int> &bits)
+{
+    bits.clear();
+    for (int i = 0; i < N; ++i)
+        bits.push_back(rand() % 2);
 }
 
 int16_t *read_pcm(const char *filename, size_t *sample_count)

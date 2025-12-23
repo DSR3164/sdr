@@ -3,11 +3,14 @@
 int main(int argc, char *argv[])
 {
     (void)argc;
+    double shift = 0e3;
+    double carrier = 734750e3; // real = +-734747e3
     sdr_config_t sdr1(
-        argv[2], 1920,
+        argv[1], 1920,
+        // tx, rx
         1e6, 1e6,
-        800e6, 800e6,
-        40.0, -7.0);
+        carrier+shift, carrier+shift,
+        -10.0, 55.0);
 
     if (init(&sdr1) != 0)
     {
@@ -17,64 +20,40 @@ int main(int argc, char *argv[])
 
     int N = 1920;
     vector<int> bits(N);
-
-    for (int i = 0; i < N; ++i)
-    {
-        bits[i] = rand() % 2;
-    }
-    vector<int16_t> qpsk_tx_buffer(1920 * 2);
+    vector<int16_t> qpsk_tx_buffer(N * 5);
     vector<int16_t> rx_buffer(1920 * 2);
 
-    qpsk(bits, qpsk_tx_buffer);
+    gen_bits(N, bits);
+    qpsk_3gpp(bits, qpsk_tx_buffer, true);
 
+    implement_barker(qpsk_tx_buffer);
 
     void *tx_buffs[] = {qpsk_tx_buffer.data()}; // Buffer for transmitting samples
     void *rx_buffs[] = {rx_buffer.data()};      // Buffer for transmitting samples
     FILE *file_rx;
-    if (strcmp(argv[1], argv[2]) == 0)
-    {
-        file_rx = fopen("/home/plutoSDR/sdr/pluto/dev/rx1.pcm", "wb");
-    }
-    else
-    {
+    file_rx = fopen("/home/plutoSDR/sdr/pluto/dev/rxtest.pcm", "wb");
+    if (strcmp(argv[2], "rx") == 0)
         file_rx = fopen("/home/plutoSDR/sdr/pluto/dev/rx.pcm", "wb");
-    }
     FILE *file_tx = fopen("/home/plutoSDR/sdr/pluto/dev/tx1.pcm", "wb");
 
     int flags = SOAPY_SDR_HAS_TIME;
     long long timeNs;
-    long long last_time = 0;
     long timeoutUs = 400000;
     int sr = 0;
     int st = 0;
 
-    fwrite(tx_buffs[0], 2 * sdr1.buffer_size * sizeof(int16_t), 1, file_tx);
-
-    int k = 150;
-
-    while (k > 1)
+    for (int k = 0; k < 100000; k++)
     {
-
+        sr = SoapySDRDevice_readStream(sdr1.sdr, sdr1.rxStream, rx_buffs, sdr1.buffer_size, &flags, &timeNs, timeoutUs);
         long long tx_time = timeNs + (4 * 1000 * 1000); // Schedule TX 4ms ahead
-
-        if (strcmp(argv[1], argv[2]) == 0)
+        if (strcmp(argv[2], "rx") != 0)
         {
-            sr = SoapySDRDevice_readStream(sdr1.sdr, sdr1.rxStream, rx_buffs, sdr1.buffer_size, &flags, &timeNs, timeoutUs);
-            fwrite(rx_buffs[0], 2 * sr * sizeof(int16_t), 1, file_rx);
+            st = SoapySDRDevice_writeStream(sdr1.sdr, sdr1.txStream, (const void *const *)tx_buffs, sdr1.buffer_size, &flags, tx_time, timeoutUs);
+            (void)st;
         }
-        else
-        {
-            if (k > 10)
-            {
-                st = SoapySDRDevice_writeStream(sdr1.sdr, sdr1.txStream, (const void *const *)tx_buffs, sdr1.buffer_size, &flags, tx_time, timeoutUs);
-                (void)st;
-            }
-        }
-
-        last_time = tx_time;
-        k -= 1;
+        fwrite(rx_buffs[0], 2 * sr * sizeof(int16_t), 1, file_rx);
+        fwrite(tx_buffs[0], 2 * sdr1.buffer_size * sizeof(int16_t), 1, file_tx);
     }
-
     fclose(file_rx);
     fclose(file_tx);
     deinit(&sdr1);

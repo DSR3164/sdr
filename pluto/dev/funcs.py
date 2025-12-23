@@ -1,5 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from vispy import app, scene, plot as vp, visuals
+from vispy.scene.visuals import Markers, Line
 
 def gardner(complex_symbols_after_convolve, SPS = 10):
     K1 = 0; K2 = 0; p1 = 0; p2 = 0; e = 0; offset = 0; Kp = 4
@@ -10,8 +12,7 @@ def gardner(complex_symbols_after_convolve, SPS = 10):
     K2 = (-4*teta**2)/((1 + 2*zeta*teta + teta**2)*Kp)
     s = complex_symbols_after_convolve
     offset_list = []
-    err_list = []
-    mean_err = []
+    fixed = []
     for i in range(0, len(s)//SPS-1):
         n = offset
         e  = (np.real(s[n + SPS + SPS*i]) - np.real(s[n + SPS*i])) * np.real(s[n + SPS//2 + SPS*i])
@@ -21,51 +22,57 @@ def gardner(complex_symbols_after_convolve, SPS = 10):
         p2 %= 1
         offset = int(np.round(p2*SPS))
 
+        fixed.append(s[SPS*i + offset])
         offset_list.append(offset)
-        err_list.append(e)
-    
-    right = 0
-    for y in range(0, 2):
-        for i in range(right - SPS//2, right + SPS//2+1):
-            temp = []
-            for x in range(0, len(s) - SPS*2-i, SPS):
-                of = x + i
-                e  = (np.real(s[of + SPS + SPS]) - np.real(s[of + SPS])) * np.real(s[of + SPS//2 + SPS])
-                e += (np.imag(s[of + SPS + SPS]) - np.imag(s[of + SPS])) * np.imag(s[of + SPS//2 + SPS])
-                temp.append(e)
-            mean_err.append(np.mean(temp))
-            temp.clear()
-        right = int(np.round(np.argmin(np.abs(mean_err))))
-        if y != 1:
-            mean_err.clear()
-
     offset_list = np.array(offset_list, dtype=int)
-    err_list = np.array(err_list, dtype=float)
-    mean_err = np.array(mean_err, dtype=float)
-
-    return right, offset_list, err_list, mean_err
+    fixed = np.array(fixed)
+    return fixed, offset_list
 
 def costas_loop(samples):
-    samples_fix = np.zeros_like(samples, dtype=complex)
+    out = np.zeros_like(samples, dtype=complex)
 
-    theta_hat = 0.0
-    Kp = 0.05
-    Ki = 0.005
-    integrator = 0.0
+    theta = 0.0
+    freq = 0.0
 
-    for n in range(0, len(samples)):
-        r_corrected = samples[n] * np.exp(-1j * theta_hat)
-        samples_fix[n] = r_corrected
+    Kp = 0.02
+    Ki = 0.0002
 
-        I = np.real(r_corrected)
-        Q = np.imag(r_corrected)
-        error = np.sign(I)*Q - np.sign(Q)*I
+    for n in range(len(samples)):
+        r = samples[n] * np.exp(-1j * theta)
+        out[n] = r
 
-        integrator += error
-        theta_hat += Kp*error + Ki*integrator
+        I = np.real(r)
+        Q = np.imag(r)
 
-    return samples_fix
+        I_hat = np.sign(I)
+        Q_hat = np.sign(Q)
 
+        error = I_hat*Q - Q_hat*I
+        error = np.clip(error, -1.0, 1.0)
+
+        freq += Ki * error
+        theta += freq + Kp * error
+        theta = (theta + np.pi) % (2*np.pi) - np.pi
+
+    return out
+
+def find_barker(rx_syms):
+    barker = np.array(
+        [1, 1, 1, 1, 1, -1, -1, 1, 1, -1, 1, -1, 1],
+        dtype=np.complex64
+    )
+
+    M = len(barker)
+    corr = np.zeros(len(rx_syms) - M, dtype=np.complex64)
+    
+    for i in range(len(corr)):
+        temp = np.vdot(barker, rx_syms[i:i+M])
+        norm = np.linalg.norm(barker) * np.linalg.norm(rx_syms[i:i+M])
+        corr[i]=temp/norm
+
+    mag = np.abs(corr)
+    idx = np.argmax(mag)
+    return idx, corr, mag
 
 def freq_loop(conv):
     mu = 0
@@ -79,3 +86,27 @@ def freq_loop(conv):
         omega = omega + mu * freq_error[n]
         output_signal[n] = conv[n] * np.exp(-1j * omega)
     return output_signal
+
+def vispy_line(samples:np.ndarray, title="Сигнал", bgcolor='white', is_complex:bool = True):
+    m = np.max(np.abs(samples))
+    l = len(samples)
+    x = np.arange(l)
+    canvas = scene.SceneCanvas(show=True, title=title, bgcolor=bgcolor)
+    view = canvas.central_widget.add_view()
+    view.camera = scene.PanZoomCamera()
+    if (is_complex):
+        view.add(Line(np.c_[x, np.real(samples)], color='blue', width=2))
+        view.add(Line(np.c_[x, np.imag(samples)], color='orange', width=2))
+    else:
+        view.add(Line(np.c_[x, samples], color='blue', width=2))
+    view.camera.rect = (0, -m, l, 2*m)
+
+def vispy_constelation(samples:np.ndarray, title = "Сигнальное созвездие", size = 2, edge_color='grey', face_color='blue', bgcolor='white'):
+    x = np.max(np.abs(samples))
+    canvas = scene.SceneCanvas(keys='interactive', show=True,  title=title, bgcolor=bgcolor)
+    view = canvas.central_widget.add_view()
+    view.camera = scene.PanZoomCamera(aspect=1)
+    view.add(Line(pos=np.array([[-x*2,0],[x*2,0]]), width=2))
+    view.add(Line(pos=np.array([[0,-x*2],[0,x*2]]), width=2))
+    view.add(Markers(pos = np.c_[np.real(samples), np.imag(samples)], parent=view.scene, size=size, face_color=face_color, edge_color=edge_color))
+    view.camera.rect = (-x, -x, x + x, x + x)
