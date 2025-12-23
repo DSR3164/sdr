@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
         // tx, rx
         1e6, 1e6,
         carrier+shift, carrier+shift,
-        -10.0, 55.0);
+        -10.0, 25.0);
 
     if (init(&sdr1) != 0)
     {
@@ -41,6 +41,7 @@ int main(int argc, char *argv[])
     long timeoutUs = 400000;
     int sr = 0;
     int st = 0;
+    int count = 0;
 
     for (int k = 0; k < 100000; k++)
     {
@@ -53,6 +54,10 @@ int main(int argc, char *argv[])
         }
         fwrite(rx_buffs[0], 2 * sr * sizeof(int16_t), 1, file_rx);
         fwrite(tx_buffs[0], 2 * sdr1.buffer_size * sizeof(int16_t), 1, file_tx);
+        if (k%520==0 && k != 0){
+            count +=1;
+            cout << count << " second\t" << k << " buffs" << endl;
+        }
     }
     fclose(file_rx);
     fclose(file_tx);

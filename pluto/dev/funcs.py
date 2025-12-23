@@ -4,8 +4,8 @@ from vispy import app, scene, plot as vp, visuals
 from vispy.scene.visuals import Markers, Line
 
 def gardner(complex_symbols_after_convolve, SPS = 10):
-    K1 = 0; K2 = 0; p1 = 0; p2 = 0; e = 0; offset = 0; Kp = 4
-    BnTs = 0.01; 
+    K1 = 0; K2 = 0; p1 = 0; p2 = 0; e = 0; offset = 0; Kp = 1
+    BnTs = 0.000005; 
     zeta = np.sqrt(2)/2
     teta = ((BnTs)/10)/(zeta + 1/(4*zeta))
     K1 = (-4*zeta*teta)/((1 + 2*zeta*teta + teta**2)*Kp)
@@ -35,7 +35,7 @@ def costas_loop(samples):
     freq = 0.0
 
     Kp = 0.02
-    Ki = 0.0002
+    Ki = 0.0001
 
     for n in range(len(samples)):
         r = samples[n] * np.exp(-1j * theta)
