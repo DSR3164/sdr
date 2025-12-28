@@ -1,7 +1,9 @@
 #pragma once
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
+#include <algorithm>
 #include <iostream>
+#include <fstream>
 #include <complex>
 #include <cstdint>
 #include <cstdlib>
@@ -53,6 +55,8 @@ typedef struct sdr_config_s
 
 int init(sdr_config_t *config);
 int deinit(sdr_config_t *config);
+void rrc(double beta, int sps, int N, vector<double> &h);
+void file_to_bits(const string &path, vector<int> &bits);
 void bpsk_mapper(const vector<int> &bits, vector<cp> &symbols);
 void qpsk_mapper(const vector<int> &bits, vector<cp> &symbols);
 void bpsk_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols);
@@ -61,6 +65,7 @@ void qam16_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols);
 void upsample(const vector<cp> &symbols, vector<cp> &upsampled, int up = 10);
 void filter_i(const vector<cp> &a, const vector<double> &b, vector<double> &y);
 void filter_q(const vector<cp> &a, const vector<double> &b, vector<double> &y);
+void filter_rrc(const vector<cp> &a, const vector<double> &b, vector<cp> &y);
 void bpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp = false, int sps = 10);
 void qpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp = false, int sps = 10);
 void bpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps = 10);

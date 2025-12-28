@@ -94,7 +94,7 @@ blocks:
     bus_structure: null
     coordinate: [520, 96.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: audio_sink_0
   id: audio_sink
   parameters:
@@ -111,7 +111,7 @@ blocks:
     bus_structure: null
     coordinate: [752, 104.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: digital_costas_loop_cc_0
   id: digital_costas_loop_cc
   parameters:
@@ -457,7 +457,7 @@ blocks:
     bus_structure: null
     coordinate: [520, 240.0]
     rotation: 0
-    state: enabled
+    state: disabled
 
 connections:
 - [analog_wfm_rcv_0, '0', audio_sink_0, '0']
@@ -470,3 +470,4 @@ connections:
 
 metadata:
   file_format: 1
+  grc_version: 3.10.12.0
