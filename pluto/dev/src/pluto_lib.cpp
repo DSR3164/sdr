@@ -124,6 +124,45 @@ void filter_q(const vector<cp> &a, const vector<double> &b, vector<double> &y)
     }
 }
 
+void rrc(double beta, int sps, int N, vector<double> &h)
+{
+    int len = N * sps + 1;
+    h.resize(len, 0.0);
+
+    double T = 1.0;
+    int mid = len / 2;
+
+    for (int i = 0; i < len; ++i)
+    {
+        double t = (i - mid) / double(sps);
+        if (t == 0.0)
+            h[i] = 1.0 - beta + 4 * beta / M_PI;
+        else if (abs(t) == T / (4 * beta))
+            h[i] = (beta / sqrt(2)) * ((1 + 2 / M_PI) * sin(M_PI / (4 * beta)) +
+                                       (1 - 2 / M_PI) * cos(M_PI / (4 * beta)));
+        else
+            h[i] = (sin(M_PI * t * (1 - beta) / T) + 4 * beta * t / T * cos(M_PI * t * (1 + beta) / T)) / (M_PI * t * (1 - (4 * beta * t / T) * (4 * beta * t / T)));
+    }
+}
+
+void filter_rrc(const vector<cp> &a, const vector<double> &b, vector<cp> &y)
+{
+    int nb = b.size();
+    int na = a.size();
+    y.resize(na + nb - 1, {0.0f, 0.0f});
+    for (int n = 0; n < na + nb - 1; ++n)
+    {
+        cp acc{0.0f, 0.0f};
+        for (int m = 0; m < nb; ++m)
+        {
+            int k = n - m;
+            if (k >= 0 && k < na)
+                acc += a[k] * b[m];
+        }
+        y[n] = acc;
+    }
+}
+
 void bpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
 {
     vector<cp> symbols(bits.size());
@@ -137,6 +176,8 @@ void bpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int 
     filter_i(upsampled, b, signal_i);
 
     size_t size = signal_i.size();
+    buffer.clear();
+    buffer.resize(signal_i.size() * 2);
     for (size_t i = 0; i < size; ++i)
     {
         buffer[2 * i] = (i <= size) ? ((signal_i[i] * 16000)) : 0;
@@ -175,6 +216,8 @@ void qpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int 
     }
 
     size_t size = signal_i.size();
+    buffer.clear();
+    buffer.resize(signal_i.size() * 2);
     for (size_t i = 0; i < buffer.size(); i += 2)
     {
         buffer[i] = (i <= size) ? ((signal_i[i / 2] * 16000)) : 0;
@@ -205,6 +248,8 @@ void bpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp,
     filter_q(upsampled, b, signal_q);
 
     size_t size = signal_i.size();
+    buffer.clear();
+    buffer.resize(signal_i.size() * 2);
     for (size_t i = 0; i < buffer.size(); i += 2)
     {
         buffer[i] = (i <= size) ? ((signal_i[i / 2] * 16000)) : 0;
@@ -235,6 +280,8 @@ void qpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp,
     filter_q(upsampled, b, signal_q);
 
     size_t size = signal_i.size();
+    buffer.clear();
+    buffer.resize(signal_i.size() * 2);
     for (size_t i = 0; i < (symbols.size() * sps); i += 2)
     {
         buffer[i] = (int16_t)(signal_i[i / 2] * 16000);
@@ -265,10 +312,49 @@ void qam16_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp
     filter_q(upsampled, b, signal_q);
 
     size_t size = signal_i.size();
+    buffer.clear();
+    buffer.resize(signal_i.size() * 2);
     for (size_t i = 0; i < buffer.size(); i += 2)
     {
         buffer[i] = (i <= size) ? ((signal_i[i / 2] * 16000)) : 0;
         buffer[i + 1] = (i <= size) ? ((signal_q[i / 2] * 16000)) : 0;
+    }
+
+    if (timestamp)
+    {
+        for (size_t i = 0; i < 2; i++) // Insert Timestamp
+        {
+            buffer[0 + i] = 0xffff;
+            buffer[10 + i] = 0xffff;
+        }
+    }
+}
+
+void qam16_3gpp_rrc(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
+{
+    vector<cp> symbols(bits.size() / 4);
+    vector<cp> upsampled(symbols.size() * sps);
+    vector<cp> signal(symbols.size() * sps);
+    vector<double> rrc_h;
+    vector<double> b(sps, 1.0);
+    int span = 12;
+    double beta = 0.25;
+
+    qam16_mapper_3gpp(bits, symbols);
+    upsample(symbols, upsampled, sps);
+    rrc(beta, sps, span, rrc_h);
+    filter_rrc(upsampled, rrc_h, signal);
+    cp maxcp = *std::max_element(signal.begin(), signal.end(), [](const cp &a, const cp &b)
+                                 { return std::real(a) < std::real(b); });
+    double max = maxcp.real();
+
+    size_t size = signal.size();
+    buffer.clear();
+    buffer.resize(signal.size() * 2);
+    for (size_t i = 0; i < size; ++i)
+    {
+        buffer[2 * i] = static_cast<int16_t>((signal[i].real() / max) * 16000);
+        buffer[2 * i + 1] = static_cast<int16_t>((signal[i].imag() / max) * 16000);
     }
 
     if (timestamp)
@@ -291,6 +377,21 @@ void implement_barker(vector<int16_t> &symbols, int sps)
     cout << "Size of out: " << out.size() << endl;
     for (int i = 0; i < (int)out.size(); ++i)
         symbols[i + 12] = out[i];
+}
+
+void file_to_bits(const string &path, vector<int> &bits)
+{
+    ifstream f(path, ios::binary);
+    if (!f)
+        throw runtime_error("open failed");
+
+    char c;
+    while (f.get(c))
+    {
+        uint8_t b = static_cast<uint8_t>(c);
+        for (int i = 0; i < 8; ++i)
+            bits.push_back((b >> i) & 1);
+    }
 }
 
 void gen_bits(int N, vector<int> &bits)

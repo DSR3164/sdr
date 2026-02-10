@@ -9,8 +9,8 @@ int main(int argc, char *argv[])
         argv[1], 1920,
         // tx, rx
         1e6, 1e6,
-        carrier+shift, carrier+shift,
-        -10.0, 25.0);
+        carrier + shift, carrier + shift,
+        -10.0, 45.0);
 
     if (init(&sdr1) != 0)
     {
@@ -18,23 +18,24 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    int N = 1920;
+    int N = 192000;
     vector<int> bits(N);
-    vector<int16_t> qpsk_tx_buffer(N * 5);
+    vector<int16_t> tx_buffer;
     vector<int16_t> rx_buffer(1920 * 2);
 
+    // file_to_bits("", bits);
     gen_bits(N, bits);
-    qpsk_3gpp(bits, qpsk_tx_buffer, true);
+    qam16_3gpp(bits, tx_buffer, true);
 
-    implement_barker(qpsk_tx_buffer);
+    // implement_barker(tx_buffer);
 
-    void *tx_buffs[] = {qpsk_tx_buffer.data()}; // Buffer for transmitting samples
+    void *tx_buffs[] = {tx_buffer.data()}; // Buffer for transmitting samples
     void *rx_buffs[] = {rx_buffer.data()};      // Buffer for transmitting samples
     FILE *file_rx;
-    file_rx = fopen("/home/plutoSDR/sdr/pluto/dev/rxtest.pcm", "wb");
+    file_rx = fopen("../pcm/rxtest.pcm", "wb");
     if (strcmp(argv[2], "rx") == 0)
-        file_rx = fopen("/home/plutoSDR/sdr/pluto/dev/rx.pcm", "wb");
-    FILE *file_tx = fopen("/home/plutoSDR/sdr/pluto/dev/tx1.pcm", "wb");
+        file_rx = fopen("../pcm/rx.pcm", "wb");
+    FILE *file_tx = fopen("../pcm/tx1.pcm", "wb");
 
     int flags = SOAPY_SDR_HAS_TIME;
     long long timeNs;
@@ -42,9 +43,13 @@ int main(int argc, char *argv[])
     int sr = 0;
     int st = 0;
     int count = 0;
+    float buff_count = (tx_buffer.size() / (1920 * 2));
+    cout << "Buffs: " << buff_count << endl;
+    fwrite(tx_buffs[0], 2 * (int)buff_count*1920 * sizeof(int16_t), 1, file_tx);
 
-    for (int k = 0; k < 100000; k++)
+    for (int k = 0; k < 15000000; k++)
     {
+        tx_buffs[0] = static_cast<void *>(tx_buffer.data() + 1920 * 2 * (k < buff_count ? k : 0));
         sr = SoapySDRDevice_readStream(sdr1.sdr, sdr1.rxStream, rx_buffs, sdr1.buffer_size, &flags, &timeNs, timeoutUs);
         long long tx_time = timeNs + (4 * 1000 * 1000); // Schedule TX 4ms ahead
         if (strcmp(argv[2], "rx") != 0)
@@ -54,8 +59,9 @@ int main(int argc, char *argv[])
         }
         fwrite(rx_buffs[0], 2 * sr * sizeof(int16_t), 1, file_rx);
         fwrite(tx_buffs[0], 2 * sdr1.buffer_size * sizeof(int16_t), 1, file_tx);
-        if (k%520==0 && k != 0){
-            count +=1;
+        if (k % 520 == 0 && k != 0)
+        {
+            count += 1;
             cout << count << " second\t" << k << " buffs" << endl;
         }
     }

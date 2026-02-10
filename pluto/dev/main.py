@@ -1,6 +1,6 @@
 from funcs import *
 
-app.use_app("pyqt6")
+app.use_app("pyqt5")
 
 rx = np.fromfile("/home/plutoSDR/sdr/pluto/dev/rx.pcm", dtype=np.int16)
 SPS = 10
