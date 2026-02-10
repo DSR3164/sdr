@@ -1,0 +1,7 @@
+[submodule "pluto/dev/third_party/implot"]
+	path = pluto/dev/third_party/implot
+	url = https://github.com/epezent/implot.git
+[submodule "pluto/dev/third_party/imgui"]
+	path = pluto/dev/third_party/imgui
+	url = https://github.com/ocornut/imgui.git
+	branch = docking
