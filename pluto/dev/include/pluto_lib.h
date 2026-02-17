@@ -1,46 +1,99 @@
 #pragma once
-#include <SoapySDR/Device.h>
-#include <SoapySDR/Formats.h>
-#include <algorithm>
-#include <iostream>
-#include <fstream>
+#include <SoapySDR/Device.hpp>
 #include <complex>
-#include <cstdint>
-#include <cstdlib>
-#include <cstdio>
-#include <random>
 #include <vector>
-#include <tuple>
-#include <ctime>
 #include <cstring>
+#include <cstdint>
 
-using namespace std;
-using cp = complex<double>;
+enum class Flags : uint16_t
+{
+  None = 0,
+  APPLY_GAIN = 1 << 0,
+  APPLY_FREQUENCY = 1 << 1,
+  APPLY_BANDWIDTH = 1 << 2,
+  APPLY_SAMPLE_RATE = 1 << 3,
+  REINIT = 1 << 4,
+  REMODULATION = 1 << 5,
+  SEND = 1 << 6,
+  EXIT = 1 << 7,
+  IS_ACTIVE = 1 << 8,
+};
+
+inline Flags operator|(Flags a, Flags b)
+{
+  return static_cast<Flags>(
+      static_cast<uint16_t>(a) |
+      static_cast<uint16_t>(b));
+}
+
+inline Flags operator&(Flags a, Flags b)
+{
+  return static_cast<Flags>(
+      static_cast<uint16_t>(a) &
+      static_cast<uint16_t>(b));
+}
+
+inline Flags operator~(Flags a)
+{
+  return static_cast<Flags>(
+      ~static_cast<uint16_t>(a));
+}
+
+inline Flags &operator|=(Flags &a, Flags b)
+{
+  a = a | b;
+  return a;
+}
+
+inline Flags &operator&=(Flags &a, Flags b)
+{
+  a = static_cast<Flags>(
+      static_cast<uint16_t>(a) &
+      static_cast<uint16_t>(b));
+  return a;
+}
+
+inline bool has_flag(Flags flags, Flags f)
+{
+  return (flags & f) != Flags::None;
+}
+
+inline bool has_any_except(Flags flags, Flags excluded)
+{
+  return (flags & ~excluded) != Flags::None;
+}
 
 typedef struct sdr_config_s
 {
-  char *name; // USB:V... or IP
+  std::string sdr_name;
+  int sdr_id;
+  Flags flags = Flags::None;
+
+  int modulation_type;
   int buffer_size;
-  double tx_sample_rate;
-  double rx_sample_rate;
+  double sample_rate;
 
   double tx_carrier_freq;
   double rx_carrier_freq;
+  double rx_bandwidth;
+  double tx_bandwidth;
 
   float tx_gain;
   float rx_gain;
 
+  std::vector<int16_t> buffer;
   size_t channels[1] = {0};
-  SoapySDRDevice *sdr;
-  SoapySDRStream *rxStream;
-  SoapySDRStream *txStream;
+  SoapySDR::Device *sdr;
+  SoapySDR::Stream *rxStream;
+  SoapySDR::Stream *txStream;
+  SoapySDR::Kwargs args;
 
-  sdr_config_s(char *name, int buf, double tx_sr, double rx_sr,
+  sdr_config_s(std::string name, int buf, double sr,
                double tx_f, double rx_f, float tx_g, float rx_g)
-      : name(name),
+      : sdr_name(name),
+        modulation_type(1),
         buffer_size(buf),
-        tx_sample_rate(tx_sr),
-        rx_sample_rate(rx_sr),
+        sample_rate(sr),
         tx_carrier_freq(tx_f),
         rx_carrier_freq(rx_f),
         tx_gain(tx_g),
@@ -50,28 +103,38 @@ typedef struct sdr_config_s
         rxStream(nullptr),
         txStream(nullptr)
   {
+    buffer.resize(1920 * 2);
+    auto list = SoapySDR::Device::enumerate();
+    if (!list.empty())
+    {
+      args = list[0];
+      flags |= Flags::IS_ACTIVE;
+    }
   }
 } sdr_config_t;
 
 int init(sdr_config_t *config);
 int deinit(sdr_config_t *config);
-void rrc(double beta, int sps, int N, vector<double> &h);
-void file_to_bits(const string &path, vector<int> &bits);
-void bpsk_mapper(const vector<int> &bits, vector<cp> &symbols);
-void qpsk_mapper(const vector<int> &bits, vector<cp> &symbols);
-void bpsk_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols);
-void qpsk_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols);
-void qam16_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols);
-void upsample(const vector<cp> &symbols, vector<cp> &upsampled, int up = 10);
-void filter_i(const vector<cp> &a, const vector<double> &b, vector<double> &y);
-void filter_q(const vector<cp> &a, const vector<double> &b, vector<double> &y);
-void filter_rrc(const vector<cp> &a, const vector<double> &b, vector<cp> &y);
-void bpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp = false, int sps = 10);
-void qpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp = false, int sps = 10);
-void bpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps = 10);
-void qpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps = 10);
-void qam16_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps = 10);
-void qam16_3gpp_rrc(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps = 10);
-void implement_barker(vector<int16_t> &symbols, int sps = 10);
-void gen_bits(int N, vector<int> &bits);
+void reinit(sdr_config_t &context);
+int add_args(SoapySDR::Kwargs &args);
+void apply_runtime(sdr_config_t &context);
+void rrc(double beta, int sps, int N, std::vector<double> &h);
+void file_to_bits(const std::string &path, std::vector<int> &bits);
+void bpsk_mapper(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols);
+void qpsk_mapper(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols);
+void bpsk_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols);
+void qpsk_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols);
+void qam16_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols);
+void upsample(const std::vector<std::complex<double>> &symbols, std::vector<std::complex<double>> &upsampled, int up = 10);
+void filter_i(const std::vector<std::complex<double>> &a, const std::vector<double> &b, std::vector<double> &y);
+void filter_q(const std::vector<std::complex<double>> &a, const std::vector<double> &b, std::vector<double> &y);
+void filter_rrc(const std::vector<std::complex<double>> &a, const std::vector<double> &b, std::vector<std::complex<double>> &y);
+void bpsk(const std::vector<int> &bits, std::vector<int16_t> &buffer, bool timestamp = false, int sps = 10);
+void qpsk(const std::vector<int> &bits, std::vector<int16_t> &buffer, bool timestamp = false, int sps = 10);
+void bpsk_3gpp(const std::vector<int> &bits, std::vector<int16_t> &buffer, bool timestamp, int sps = 10);
+void qpsk_3gpp(const std::vector<int> &bits, std::vector<int16_t> &buffer, bool timestamp, int sps = 10);
+void qam16_3gpp(const std::vector<int> &bits, std::vector<int16_t> &buffer, bool timestamp, int sps = 10);
+void qam16_3gpp_rrc(const std::vector<int> &bits, std::vector<int16_t> &buffer, bool timestamp, int sps = 10);
+void implement_barker(std::vector<int16_t> &symbols, int sps = 10);
+void gen_bits(int N, std::vector<int> &bits);
 int16_t *read_pcm(const char *filename, size_t *sample_count);

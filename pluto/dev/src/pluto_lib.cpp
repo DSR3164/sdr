@@ -1,31 +1,38 @@
 #include "pluto_lib.h"
+#include <SoapySDR/Formats.hpp>
+#include <SoapySDR/Device.hpp>
+#include <chrono>
+#include <thread>
+#include <iostream>
+#include <fstream>
+#include <algorithm>
 
-void bpsk_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols)
+void bpsk_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols)
 {
     for (size_t i = 0; i < symbols.size(); ++i)
-        symbols[i] = cp(bits[i] * -2.0 + 1.0, bits[i] * -2.0 + 1.0) / sqrt(2);
+        symbols[i] = std::complex<double>(bits[i] * -2.0 + 1.0, bits[i] * -2.0 + 1.0) / sqrt(2);
 }
 
-void qpsk_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols)
+void qpsk_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols)
 {
     for (size_t i = 0; i < symbols.size(); ++i)
-        symbols[i] = cp(bits[2 * i] * -2.0 + 1.0, bits[2 * i + 1] * -2.0 + 1.0) / sqrt(2.0);
+        symbols[i] = std::complex<double>(bits[2 * i] * -2.0 + 1.0, bits[2 * i + 1] * -2.0 + 1.0) / sqrt(2.0);
 }
 
-void qam16_mapper_3gpp(const vector<int> &bits, vector<cp> &symbols)
+void qam16_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols)
 {
     for (size_t i = 0; i < symbols.size(); ++i)
-        symbols[i] = cp((1 - 2 * bits[4 * i + 0]) * (2 - (1 - 2 * bits[4 * i + 2])),
-                        (1 - 2 * bits[4 * i + 1]) * (2 - (1 - 2 * bits[4 * i + 3]))) /
+        symbols[i] = std::complex<double>((1 - 2 * bits[4 * i + 0]) * (2 - (1 - 2 * bits[4 * i + 2])),
+                                          (1 - 2 * bits[4 * i + 1]) * (2 - (1 - 2 * bits[4 * i + 3]))) /
                      sqrt(10.0);
 }
 
-void bpsk_mapper(const vector<int> &bits, vector<cp> &symbols)
+void bpsk_mapper(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols)
 {
     /*
     Map input bits to QPSK symbols and store them in 'symbols'.
-    'bits' is the input vector of bits (0s and 1s).
-    'symbols' is the output vector of complex symbols.
+    'bits' is the input std::vector of bits (0s and 1s).
+    'symbols' is the output std::vector of complex symbols.
     00 -> +1 + 1j
     01 -> +1 - 1j
     10 -> -1 + 1j
@@ -33,15 +40,15 @@ void bpsk_mapper(const vector<int> &bits, vector<cp> &symbols)
     */
 
     for (size_t i = 0; i < symbols.size(); ++i)
-        symbols[i] = cp(bits[i] * -2.0 + 1.0, bits[i] * -2.0 + 1.0);
+        symbols[i] = std::complex<double>(bits[i] * -2.0 + 1.0, bits[i] * -2.0 + 1.0);
 }
 
-void qpsk_mapper(const vector<int> &bits, vector<cp> &symbols)
+void qpsk_mapper(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols)
 {
     /*
     Map input bits to QPSK symbols and store them in 'symbols'.
-    'bits' is the input vector of bits (0s and 1s).
-    'symbols' is the output vector of complex symbols.
+    'bits' is the input std::vector of bits (0s and 1s).
+    'symbols' is the output std::vector of complex symbols.
     00 -> +1 + 1j
     01 -> +1 - 1j
     10 -> -1 + 1j
@@ -49,15 +56,15 @@ void qpsk_mapper(const vector<int> &bits, vector<cp> &symbols)
     */
 
     for (size_t i = 0; i < symbols.size(); ++i)
-        symbols[i] = cp(bits[2 * i] * -2.0 + 1.0, bits[2 * i + 1] * -2.0 + 1.0);
+        symbols[i] = std::complex<double>(bits[2 * i] * -2.0 + 1.0, bits[2 * i + 1] * -2.0 + 1.0);
 }
 
-void upsample(const vector<cp> &symbols, vector<cp> &upsampled, int up)
+void upsample(const std::vector<std::complex<double>> &symbols, std::vector<std::complex<double>> &upsampled, int up)
 {
     /*
     Upsample the input symbols with zeros by a factor of 'up' and store the result in 'upsampled'.
-    'symbols' is the input vector of complex symbols.
-    'upsampled' is the output vector of complex samples after upsampling.
+    'symbols' is the input std::vector of complex symbols.
+    'upsampled' is the output std::vector of complex samples after upsampling.
     'up' is the upsampling factor (default is 10).
     */
 
@@ -66,7 +73,7 @@ void upsample(const vector<cp> &symbols, vector<cp> &upsampled, int up)
         printf("Ошибка: недостаточный размер вектора для апсемплинга!\n");
         return;
     }
-    fill(upsampled.begin(), upsampled.end(), cp(0, 0));
+    fill(upsampled.begin(), upsampled.end(), std::complex<double>(0, 0));
 
     for (size_t i = 0; i < symbols.size(); ++i)
     {
@@ -74,16 +81,16 @@ void upsample(const vector<cp> &symbols, vector<cp> &upsampled, int up)
     }
 }
 
-void filter_i(const vector<cp> &a, const vector<double> &b, vector<double> &y)
+void filter_i(const std::vector<std::complex<double>> &a, const std::vector<double> &b, std::vector<double> &y)
 {
     /*
     Convolve input signal 'a' with filter coefficients 'b' and store the result in 'y'.
-    'a' is a vector of complex samples.
-    'b' is a vector of filter coefficients (real numbers), constant 1 in our case.
-    'y' is the output vector of integers (filtered signal).
+    'a' is a std::vector of complex samples.
+    'b' is a std::vector of filter coefficients (real numbers), constant 1 in our case.
+    'y' is the output std::vector of integers (filtered signal).
     */
-    const int nb = b.size();
-    const int na = a.size();
+    const int nb = (int)b.size();
+    const int na = (int)a.size();
 
     y.assign(na, 0);
 
@@ -99,16 +106,16 @@ void filter_i(const vector<cp> &a, const vector<double> &b, vector<double> &y)
     }
 }
 
-void filter_q(const vector<cp> &a, const vector<double> &b, vector<double> &y)
+void filter_q(const std::vector<std::complex<double>> &a, const std::vector<double> &b, std::vector<double> &y)
 {
     /*
     Convolve input signal 'a' with filter coefficients 'b' and store the result in 'y'.
-    'a' is a vector of complex samples.
-    'b' is a vector of filter coefficients (real numbers), constant 1 in our case.
-    'y' is the output vector of integers (filtered signal).
+    'a' is a std::vector of complex samples.
+    'b' is a std::vector of filter coefficients (real numbers), constant 1 in our case.
+    'y' is the output std::vector of integers (filtered signal).
     */
-    const int nb = b.size();
-    const int na = a.size();
+    const int nb = (int)b.size();
+    const int na = (int)a.size();
 
     y.assign(na, 0);
 
@@ -124,10 +131,11 @@ void filter_q(const vector<cp> &a, const vector<double> &b, vector<double> &y)
     }
 }
 
-void rrc(double beta, int sps, int N, vector<double> &h)
+void rrc(double beta, int sps, int N, std::vector<double> &h)
 {
     int len = N * sps + 1;
     h.resize(len, 0.0);
+    constexpr double eps = 1e-10;
 
     double T = 1.0;
     int mid = len / 2;
@@ -137,7 +145,7 @@ void rrc(double beta, int sps, int N, vector<double> &h)
         double t = (i - mid) / double(sps);
         if (t == 0.0)
             h[i] = 1.0 - beta + 4 * beta / M_PI;
-        else if (abs(t) == T / (4 * beta))
+        else if (std::abs(std::abs(t) - T / (4 * beta)) < eps)
             h[i] = (beta / sqrt(2)) * ((1 + 2 / M_PI) * sin(M_PI / (4 * beta)) +
                                        (1 - 2 / M_PI) * cos(M_PI / (4 * beta)));
         else
@@ -145,14 +153,14 @@ void rrc(double beta, int sps, int N, vector<double> &h)
     }
 }
 
-void filter_rrc(const vector<cp> &a, const vector<double> &b, vector<cp> &y)
+void filter_rrc(const std::vector<std::complex<double>> &a, const std::vector<double> &b, std::vector<std::complex<double>> &y)
 {
-    int nb = b.size();
-    int na = a.size();
+    int nb = (int)b.size();
+    int na = (int)a.size();
     y.resize(na + nb - 1, {0.0f, 0.0f});
     for (int n = 0; n < na + nb - 1; ++n)
     {
-        cp acc{0.0f, 0.0f};
+        std::complex<double> acc{0.0f, 0.0f};
         for (int m = 0; m < nb; ++m)
         {
             int k = n - m;
@@ -163,13 +171,13 @@ void filter_rrc(const vector<cp> &a, const vector<double> &b, vector<cp> &y)
     }
 }
 
-void bpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
+void bpsk(const std::vector<int> &bits, std::vector<int16_t> &buffer, bool timestamp, int sps)
 {
-    vector<cp> symbols(bits.size());
-    vector<cp> upsampled(symbols.size() * sps);
-    vector<double> signal_i(symbols.size() * sps);
-    vector<double> signal_q(symbols.size() * sps);
-    vector<double> b(sps, 1.0);
+    std::vector<std::complex<double>> symbols(bits.size());
+    std::vector<std::complex<double>> upsampled(symbols.size() * sps);
+    std::vector<double> signal_i(symbols.size() * sps);
+    std::vector<double> signal_q(symbols.size() * sps);
+    std::vector<double> b(sps, 1.0);
 
     bpsk_mapper(bits, symbols);
     upsample(symbols, upsampled, sps);
@@ -180,27 +188,27 @@ void bpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int 
     buffer.resize(signal_i.size() * 2);
     for (size_t i = 0; i < size; ++i)
     {
-        buffer[2 * i] = (i <= size) ? ((signal_i[i] * 16000)) : 0;
-        buffer[2 * i + 1] = (i <= size) ? ((signal_i[i] * 16000)) : 0;
+        buffer[2 * i] = (signal_i[i] * 16000);
+        buffer[2 * i + 1] = (signal_i[i] * 16000);
     }
 
     if (timestamp)
     {
         for (size_t i = 0; i < 2; i++) // Insert Timestamp
         {
-            buffer[0 + i] = 0xffff;
-            buffer[10 + i] = 0xffff;
+            buffer[0 + i] = 32767;
+            buffer[10 + i] = 32767;
         }
     }
 }
 
-void qpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
+void qpsk(const std::vector<int> &bits, std::vector<int16_t> &buffer, bool timestamp, int sps)
 {
-    vector<cp> symbols(bits.size() / 2);
-    vector<cp> upsampled(symbols.size() * sps);
-    vector<double> signal_i(symbols.size() * sps);
-    vector<double> signal_q(symbols.size() * sps);
-    vector<double> b(sps, 1.0);
+    std::vector<std::complex<double>> symbols(bits.size() / 2);
+    std::vector<std::complex<double>> upsampled(symbols.size() * sps);
+    std::vector<double> signal_i(symbols.size() * sps);
+    std::vector<double> signal_q(symbols.size() * sps);
+    std::vector<double> b(sps, 1.0);
 
     qpsk_mapper(bits, symbols);
     upsample(symbols, upsampled, sps);
@@ -210,7 +218,7 @@ void qpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int 
     {
         if (((signal_i[i] * signal_i[i]) != 1) || ((signal_q[i] * signal_q[i]) != 1))
         {
-            cout << "\nошибка в сигнале\n";
+            std::cout << "\nошибка в сигнале\n";
             break;
         }
     }
@@ -218,29 +226,29 @@ void qpsk(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int 
     size_t size = signal_i.size();
     buffer.clear();
     buffer.resize(signal_i.size() * 2);
-    for (size_t i = 0; i < buffer.size(); i += 2)
+    for (size_t i = 0; i < size; ++i)
     {
-        buffer[i] = (i <= size) ? ((signal_i[i / 2] * 16000)) : 0;
-        buffer[i + 1] = (i <= size) ? ((signal_q[i / 2] * 16000)) : 0;
+        buffer[2 * i] = (signal_i[i] * 16000);
+        buffer[2 * i + 1] = (signal_q[i] * 16000);
     }
 
     if (timestamp)
     {
         for (size_t i = 0; i < 2; i++) // Insert Timestamp
         {
-            buffer[0 + i] = 0xffff;
-            buffer[10 + i] = 0xffff;
+            buffer[0 + i] = 32767;
+            buffer[10 + i] = 32767;
         }
     }
 }
 
-void bpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
+void bpsk_3gpp(const std::vector<int> &bits, std::vector<int16_t> &buffer, bool timestamp, int sps)
 {
-    vector<cp> symbols(bits.size() / 2);
-    vector<cp> upsampled(symbols.size() * sps);
-    vector<double> signal_i(symbols.size() * sps);
-    vector<double> signal_q(symbols.size() * sps);
-    vector<double> b(sps, 1.0);
+    std::vector<std::complex<double>> symbols(bits.size() / 2);
+    std::vector<std::complex<double>> upsampled(symbols.size() * sps);
+    std::vector<double> signal_i(symbols.size() * sps);
+    std::vector<double> signal_q(symbols.size() * sps);
+    std::vector<double> b(sps, 1.0);
 
     bpsk_mapper_3gpp(bits, symbols);
     upsample(symbols, upsampled, sps);
@@ -260,19 +268,19 @@ void bpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp,
     {
         for (size_t i = 0; i < 2; i++) // Insert Timestamp
         {
-            buffer[0 + i] = 0xffff;
-            buffer[10 + i] = 0xffff;
+            buffer[0 + i] = 32767;
+            buffer[10 + i] = 32767;
         }
     }
 }
 
-void qpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
+void qpsk_3gpp(const std::vector<int> &bits, std::vector<int16_t> &buffer, bool timestamp, int sps)
 {
-    vector<cp> symbols(bits.size() / 2);
-    vector<cp> upsampled(symbols.size() * sps);
-    vector<double> signal_i(symbols.size() * sps);
-    vector<double> signal_q(symbols.size() * sps);
-    vector<double> b(sps, 1.0);
+    std::vector<std::complex<double>> symbols(bits.size() / 2);
+    std::vector<std::complex<double>> upsampled(symbols.size() * sps);
+    std::vector<double> signal_i(symbols.size() * sps);
+    std::vector<double> signal_q(symbols.size() * sps);
+    std::vector<double> b(sps, 1.0);
 
     qpsk_mapper_3gpp(bits, symbols);
     upsample(symbols, upsampled, sps);
@@ -288,23 +296,23 @@ void qpsk_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp,
         buffer[i + 1] = (int16_t)(signal_q[i / 2] * 16000);
     }
 
-    if (timestamp)
-    {
-        for (size_t i = 0; i < 2; i++) // Insert Timestamp
-        {
-            buffer[0 + i] = 0xffff;
-            buffer[10 + i] = 0xffff;
-        }
-    }
+    // if (timestamp)
+    // {
+    //     for (size_t i = 0; i < 2; i++) // Insert Timestamp
+    //     {
+    //         buffer[0 + i] = 32767;
+    //         buffer[10 + i] = 32767;
+    //     }
+    // }
 }
 
-void qam16_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
+void qam16_3gpp(const std::vector<int> &bits, std::vector<int16_t> &buffer, bool timestamp, int sps)
 {
-    vector<cp> symbols(bits.size() / 4);
-    vector<cp> upsampled(symbols.size() * sps);
-    vector<double> signal_i(symbols.size() * sps);
-    vector<double> signal_q(symbols.size() * sps);
-    vector<double> b(sps, 1.0);
+    std::vector<std::complex<double>> symbols(bits.size() / 4);
+    std::vector<std::complex<double>> upsampled(symbols.size() * sps);
+    std::vector<double> signal_i(symbols.size() * sps);
+    std::vector<double> signal_q(symbols.size() * sps);
+    std::vector<double> b(sps, 1.0);
 
     qam16_mapper_3gpp(bits, symbols);
     upsample(symbols, upsampled, sps);
@@ -320,23 +328,23 @@ void qam16_3gpp(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp
         buffer[i + 1] = (i <= size) ? ((signal_q[i / 2] * 16000)) : 0;
     }
 
-    if (timestamp)
-    {
-        for (size_t i = 0; i < 2; i++) // Insert Timestamp
-        {
-            buffer[0 + i] = 0xffff;
-            buffer[10 + i] = 0xffff;
-        }
-    }
+    // if (timestamp)
+    // {
+    //     for (size_t i = 0; i < 2; i++) // Insert Timestamp
+    //     {
+    //         buffer[0 + i] = 32767;
+    //         buffer[10 + i] = 32767;
+    //     }
+    // }
 }
 
-void qam16_3gpp_rrc(const vector<int> &bits, vector<int16_t> &buffer, bool timestamp, int sps)
+void qam16_3gpp_rrc(const std::vector<int> &bits, std::vector<int16_t> &buffer, bool timestamp, int sps)
 {
-    vector<cp> symbols(bits.size() / 4);
-    vector<cp> upsampled(symbols.size() * sps);
-    vector<cp> signal(symbols.size() * sps);
-    vector<double> rrc_h;
-    vector<double> b(sps, 1.0);
+    std::vector<std::complex<double>> symbols(bits.size() / 4);
+    std::vector<std::complex<double>> upsampled(symbols.size() * sps);
+    std::vector<std::complex<double>> signal(symbols.size() * sps);
+    std::vector<double> rrc_h;
+    std::vector<double> b(sps, 1.0);
     int span = 12;
     double beta = 0.25;
 
@@ -344,8 +352,8 @@ void qam16_3gpp_rrc(const vector<int> &bits, vector<int16_t> &buffer, bool times
     upsample(symbols, upsampled, sps);
     rrc(beta, sps, span, rrc_h);
     filter_rrc(upsampled, rrc_h, signal);
-    cp maxcp = *std::max_element(signal.begin(), signal.end(), [](const cp &a, const cp &b)
-                                 { return std::real(a) < std::real(b); });
+    std::complex<double> maxcp = *std::max_element(signal.begin(), signal.end(), [](const std::complex<double> &a, const std::complex<double> &b)
+                                                   { return std::real(a) < std::real(b); });
     double max = maxcp.real();
 
     size_t size = signal.size();
@@ -361,29 +369,29 @@ void qam16_3gpp_rrc(const vector<int> &bits, vector<int16_t> &buffer, bool times
     {
         for (size_t i = 0; i < 2; i++) // Insert Timestamp
         {
-            buffer[0 + i] = 0xffff;
-            buffer[10 + i] = 0xffff;
+            buffer[0 + i] = 32767;
+            buffer[10 + i] = 32767;
         }
     }
 }
 
-void implement_barker(vector<int16_t> &symbols, int sps)
+void implement_barker(std::vector<int16_t> &symbols, int sps)
 {
-    cout << "Len of buff: " << symbols.size() << endl;
-    cout << "Start implementing. . ." << endl;
-    vector<int> barker = {0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0};
-    vector<int16_t> out(barker.size() * sps * 2);
+    std::cout << "Len of buff: " << symbols.size() << std::endl;
+    std::cout << "Start implementing. . ." << std::endl;
+    std::vector<int> barker = {0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0};
+    std::vector<int16_t> out(barker.size() * sps * 2);
     bpsk(barker, out, false);
-    cout << "Size of out: " << out.size() << endl;
+    std::cout << "Size of out: " << out.size() << std::endl;
     for (int i = 0; i < (int)out.size(); ++i)
         symbols[i + 12] = out[i];
 }
 
-void file_to_bits(const string &path, vector<int> &bits)
+void file_to_bits(const std::string &path, std::vector<int> &bits)
 {
-    ifstream f(path, ios::binary);
+    std::fstream f(path, std::ios::binary);
     if (!f)
-        throw runtime_error("open failed");
+        throw std::runtime_error("open failed");
 
     char c;
     while (f.get(c))
@@ -394,7 +402,7 @@ void file_to_bits(const string &path, vector<int> &bits)
     }
 }
 
-void gen_bits(int N, vector<int> &bits)
+void gen_bits(int N, std::vector<int> &bits)
 {
     bits.clear();
     for (int i = 0; i < N; ++i)
@@ -428,65 +436,116 @@ int16_t *read_pcm(const char *filename, size_t *sample_count)
     return samples;
 }
 
+int add_args(SoapySDR::Kwargs &args)
+{
+    args["direct"] = "1";
+    args["timestamp_every"] = "1920";
+    args["loopback"] = "0";
+    return 0;
+}
+
 int init(sdr_config_t *config)
 {
-    char buffer_size[10]; // Allocate enough space
-    snprintf(buffer_size, sizeof(buffer_size), "%d", config->buffer_size);
-    SoapySDRKwargs args = {};
-    SoapySDRKwargs_set(&args, "driver", "plutosdr");
-    SoapySDRKwargs_set(&args, "uri", config->name);
-    SoapySDRKwargs_set(&args, "direct", "1");
-    SoapySDRKwargs_set(&args, "timestamp_every", buffer_size);
-    SoapySDRKwargs_set(&args, "loopback", "0");
-    config->sdr = SoapySDRDevice_make(&args);
-    SoapySDRKwargs_clear(&args);
-    SoapySDRDevice *sdr = config->sdr;
+    add_args(config->args);
+    config->sdr = SoapySDR::Device::make(config->args);
+    SoapySDR::Device *sdr = config->sdr;
 
-    if (!sdr)
+    if (!config->sdr)
     {
-        printf("No device found!\n");
+        std::cerr << "Failed to create SDR " << config->sdr_id << "\n";
         return 1;
     }
 
     // RX parameters
-    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_RX, 0, config->rx_sample_rate);
-    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_RX, 0, config->rx_carrier_freq, NULL);
+    sdr->setSampleRate(SOAPY_SDR_RX, 0, config->sample_rate);
+    sdr->setFrequency(SOAPY_SDR_RX, 0, config->rx_carrier_freq);
+    sdr->setGain(SOAPY_SDR_RX, 0, config->rx_gain);
+    sdr->setGainMode(SOAPY_SDR_RX, 0, false);
 
     // TX parameters
-    SoapySDRDevice_setSampleRate(sdr, SOAPY_SDR_TX, 0, config->tx_sample_rate);
-    SoapySDRDevice_setFrequency(sdr, SOAPY_SDR_TX, 0, config->tx_carrier_freq, NULL);
+    sdr->setSampleRate(SOAPY_SDR_TX, 0, config->sample_rate);
+    sdr->setFrequency(SOAPY_SDR_TX, 0, config->tx_carrier_freq);
+    sdr->setGain(SOAPY_SDR_TX, 0, config->tx_gain);
+    sdr->setGainMode(SOAPY_SDR_TX, 0, false);
 
-    // Initialize channel count for RX\TX (in AdalmPluto it is one, zero)
-    size_t channel = 0;
+    // Stream parameters
+    std::vector<size_t> channels = {0};
+    config->rxStream = config->sdr->setupStream(SOAPY_SDR_RX, SOAPY_SDR_CS16, channels);
+    config->txStream = config->sdr->setupStream(SOAPY_SDR_TX, SOAPY_SDR_CS16, channels);
+    SoapySDR::Stream *rxStream = config->rxStream;
+    SoapySDR::Stream *txStream = config->txStream;
 
-    // Configure the gain settings for the receiver and transmitter
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_RX, channel, config->rx_gain); // RX sensitivity
-    SoapySDRDevice_setGain(sdr, SOAPY_SDR_TX, channel, config->tx_gain); // TX power
+    sdr->activateStream(rxStream, 0, 0, 0);
+    sdr->activateStream(txStream, 0, 0, 0);
+    std::cout << "\nCreate SDR:" << config->args["uri"] << "\n";
 
-    size_t numchun = 0;
-    size_t channels[] = {0};
-    // Forming streams for transmitting and receiving samples
-    config->rxStream = SoapySDRDevice_setupStream(sdr, SOAPY_SDR_RX, SOAPY_SDR_CS16, channels, numchun, NULL);
-    config->txStream = SoapySDRDevice_setupStream(sdr, SOAPY_SDR_TX, SOAPY_SDR_CS16, channels, numchun, NULL);
-    SoapySDRStream *rxStream = config->rxStream;
-    SoapySDRStream *txStream = config->txStream;
-
-    SoapySDRDevice_activateStream(sdr, rxStream, 0, 0, 0); // start streaming
-    SoapySDRDevice_activateStream(sdr, txStream, 0, 0, 0); // start streaming
     return 0;
 }
 
 int deinit(sdr_config_t *config)
 {
-    // stop streaming
-    SoapySDRDevice_deactivateStream(config->sdr, config->rxStream, 0, 0);
-    SoapySDRDevice_deactivateStream(config->sdr, config->txStream, 0, 0);
+    if (!config)
+        return 0;
 
-    // shutdown the stream
-    SoapySDRDevice_closeStream(config->sdr, config->rxStream);
-    SoapySDRDevice_closeStream(config->sdr, config->txStream);
-
-    // cleanup device handle
-    SoapySDRDevice_unmake(config->sdr);
+    if (config->sdr)
+    {
+        if (config->rxStream)
+        {
+            config->sdr->deactivateStream(config->rxStream, 0, 0);
+            config->sdr->closeStream(config->rxStream);
+            config->rxStream = nullptr;
+        }
+        if (config->txStream)
+        {
+            config->sdr->deactivateStream(config->txStream, 0, 0);
+            config->sdr->closeStream(config->txStream);
+            config->txStream = nullptr;
+        }
+        std::cout << "\nDelete SDR:" << config->args["uri"] << "\n";
+        SoapySDR::Device::unmake(config->sdr);
+        config->sdr = nullptr;
+    }
     return 0;
+}
+
+void reinit(sdr_config_t &context)
+{
+    deinit(&context);
+    init(&context);
+    context.flags &= ~Flags::REINIT;
+}
+
+void apply_runtime(sdr_config_t &context)
+{
+    if (!context.sdr)
+        return;
+
+    if ((context.flags & Flags::APPLY_FREQUENCY) != Flags::None)
+    {
+
+        context.sdr->setFrequency(SOAPY_SDR_TX, 0, context.tx_carrier_freq);
+        context.sdr->setFrequency(SOAPY_SDR_RX, 0, context.rx_carrier_freq);
+        context.flags &= ~Flags::APPLY_FREQUENCY;
+    }
+
+    if ((context.flags & Flags::APPLY_BANDWIDTH) != Flags::None)
+    {
+        context.sdr->setBandwidth(SOAPY_SDR_TX, 0, context.tx_bandwidth);
+        context.sdr->setBandwidth(SOAPY_SDR_RX, 0, context.rx_bandwidth);
+        context.flags &= ~Flags::APPLY_BANDWIDTH;
+    }
+
+    if ((context.flags & Flags::APPLY_GAIN) != Flags::None)
+    {
+        context.sdr->setGain(SOAPY_SDR_TX, 0, context.tx_gain);
+        context.sdr->setGain(SOAPY_SDR_RX, 0, context.rx_gain);
+        context.flags &= ~Flags::APPLY_GAIN;
+    }
+
+    if ((context.flags & Flags::APPLY_SAMPLE_RATE) != Flags::None)
+    {
+        context.sdr->setSampleRate(SOAPY_SDR_RX, 0, context.sample_rate);
+        context.sdr->setSampleRate(SOAPY_SDR_TX, 0, context.sample_rate);
+        context.flags &= ~Flags::APPLY_SAMPLE_RATE;
+    }
 }
