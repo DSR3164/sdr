@@ -8,14 +8,10 @@
 #include <cstring>
 #include <fftw3.h>
 #include "gui.h"
-#include <thread>
-#include <chrono>
-#include "imgui.h"
-#include <iostream>
 
 namespace gui
 {
-    void change_modulation(sdr_config_t *sdr_config, std::vector<int16_t> &tx_buffer)
+    void change_modulation(sdr_config_t &sdr_config, std::vector<int16_t> &tx_buffer)
     {
         int N = 192000;
         std::vector<int> bits(N);
@@ -23,7 +19,7 @@ namespace gui
 
         tx_buffer.clear();
 
-        switch (sdr_config->modulation_type)
+        switch (sdr_config.modulation_type)
         {
         case 0:
             bpsk_3gpp(bits, tx_buffer, false);
@@ -37,11 +33,14 @@ namespace gui
         case 3:
             qam16_3gpp_rrc(bits, tx_buffer, false);
             break;
+        case 4:
+            ofdm(bits, tx_buffer, sdr_config.n, sdr_config.ncp, sdr_config.ps);
+            break;
         default:
             break;
         }
 
-        sdr_config->flags &= ~Flags::REMODULATION;
+        sdr_config.flags &= ~Flags::REMODULATION;
     }
 
     namespace
@@ -54,17 +53,17 @@ namespace gui
             fftwf_complex *out = nullptr;
             fftwf_plan plan = nullptr;
 
-            FFTWPlan() : window(gui::NFFTW)
+            FFTWPlan(int size) : window(size)
             {
-                for (int i = 0; i < gui::NFFTW; ++i)
-                    window[i] = 0.5f - 0.5f * std::cos(2.0f * float(M_PI) * float(i) / float(gui::NFFTW - 1));
+                for (int i = 0; i < size; ++i)
+                    window[i] = 0.5f - 0.5f * std::cos(2.0f * float(M_PI) * float(i) / float(size - 1));
 
-                in = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * gui::NFFTW));
-                out = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * gui::NFFTW));
+                in = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
+                out = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
                 if (!in || !out)
                     throw std::bad_alloc{};
 
-                plan = fftwf_plan_dft_1d(gui::NFFTW, in, out, FFTW_FORWARD, FFTW_MEASURE);
+                plan = fftwf_plan_dft_1d(size, in, out, FFTW_FORWARD, FFTW_MEASURE);
                 if (!plan)
                     throw std::runtime_error("fftwf_plan_dft_1d failed");
             }
@@ -83,22 +82,30 @@ namespace gui
             FFTWPlan &operator=(const FFTWPlan &) = delete;
         };
 
-        FFTWPlan &fftw_singleton()
+        FFTWPlan &fftw_singleton(int size)
         {
-            static FFTWPlan p;
+            static FFTWPlan p{ size };
             return p;
         }
 
     } // namespace
 
-    void compute_fftw(const int16_t *iq, float *out_db)
+    static inline float hann(int n, int N)
     {
-        if (!iq || !out_db)
-            return;
+        return 0.5f - 0.5f * std::cos(2.0f * (float)M_PI * (float)n / (float)(N - 1));
+    }
 
-        auto &p = fftw_singleton();
+    void compute_fftw(const std::vector<int16_t> &iq, std::vector<float> &out_db)
+    {
+        static const int maxim = (int)(iq.size() / 2);
+        static std::vector<float> avg(maxim, 0.0f);
+        float alpha = 0.1f;
+        auto &p = fftw_singleton(maxim);
 
-        for (int i = 0; i < gui::NFFTW; ++i)
+        out_db.clear();
+        out_db.resize(maxim);
+
+        for (int i = 0; i < maxim; ++i)
         {
             constexpr float inv = 1.0f / 32768.0f;
             float re = float(iq[2 * i + 0]) * inv;
@@ -110,27 +117,23 @@ namespace gui
         fftwf_execute(p.plan);
 
         constexpr float eps = 1e-12f;
-        for (int i = 0; i < gui::NFFTW; ++i)
+        for (int i = 0; i < maxim; ++i)
         {
-            int idx = (i + gui::NFFTW / 2) % gui::NFFTW;
+            int idx = (i + maxim / 2) % maxim;
             float re = p.out[idx][0];
             float im = p.out[idx][1];
             float pow_ = re * re + im * im + eps;
-            out_db[i] = 10.0f * std::log10(pow_);
+            avg[i] = (1.0f - alpha) * avg[i] + alpha * pow_;
+            out_db[i] = 10.0f * log10(avg[i] + eps);
         }
     }
 
-    static inline float hann(int n, int N)
+    void compute_hz(sdr_config_t &context, std::vector<float> &x_hz)
     {
-        return 0.5f - 0.5f * std::cos(2.0f * (float)M_PI * (float)n / (float)(N - 1));
-    }
-
-    void compute_hz(sdr_config_t *cfg, std::vector<float> &x_hz)
-    {
-        const double Fs = cfg->sample_rate;
-        for (int i = 0; i < gui::NFFTW; ++i)
+        const double Fs = context.sample_rate;
+        for (int i = 0; i < x_hz.size(); ++i)
         {
-            double f = ((double)i / gui::NFFTW - 0.5) * Fs;
+            double f = ((double)i / x_hz.size() - 0.5) * Fs;
             x_hz[i] = (float)f;
         }
     }

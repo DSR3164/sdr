@@ -11,4 +11,5 @@
 pluto/dev/build
 .vscode
 .venv
+.cache
 *.pyc

@@ -1,11 +1,42 @@
 #include "pluto_lib.h"
+#include "fftw3.h"
 #include <SoapySDR/Formats.hpp>
 #include <SoapySDR/Device.hpp>
-#include <chrono>
-#include <thread>
 #include <iostream>
 #include <fstream>
 #include <algorithm>
+
+struct IFFTWPlan
+{
+    fftwf_complex *in = nullptr;
+    fftwf_complex *out = nullptr;
+    fftwf_plan plan = nullptr;
+
+    IFFTWPlan(size_t size)
+    {
+        in = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
+        out = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
+        if (!in || !out)
+            throw std::bad_alloc{};
+
+        plan = fftwf_plan_dft_1d(static_cast<int>(size), in, out, FFTW_BACKWARD, FFTW_MEASURE);
+        if (!plan)
+            throw std::runtime_error("fftwf_plan_dft_1d failed");
+    }
+
+    ~IFFTWPlan()
+    {
+        if (plan)
+            fftwf_destroy_plan(plan);
+        if (in)
+            fftwf_free(in);
+        if (out)
+            fftwf_free(out);
+    }
+
+    IFFTWPlan(const IFFTWPlan &) = delete;
+    IFFTWPlan &operator=(const IFFTWPlan &) = delete;
+};
 
 void bpsk_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols)
 {
@@ -371,6 +402,86 @@ void qam16_3gpp_rrc(const std::vector<int> &bits, std::vector<int16_t> &buffer, 
         {
             buffer[0 + i] = 32767;
             buffer[10 + i] = 32767;
+        }
+    }
+}
+
+void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int Ncp, int pilot_spacing)
+{
+    if (N < 4)
+        return;
+
+    buffer.resize(0);
+    buffer.clear();
+    std::vector<std::complex<double>> symbols(bits.size() / 2);
+    qpsk_mapper_3gpp(bits, symbols);
+
+    IFFTWPlan ifft(N);
+
+    int total_qpsk = (int)symbols.size();
+
+    std::vector<int> data_positions;
+    std::vector<int> pilot_positions;
+
+    int counter = 0;
+
+    for (int k = 1; k < N; ++k)
+    {
+        if (k == N / 2)
+            continue;
+
+        if (counter % pilot_spacing == 0)
+            pilot_positions.push_back(k);
+        else
+            data_positions.push_back(k);
+
+        counter++;
+    }
+
+    int symbols_per_ofdm = data_positions.size();
+    int num_ofdm_symbols = total_qpsk / symbols_per_ofdm;
+
+    for (int sym = 0; sym < num_ofdm_symbols; ++sym)
+    {
+        for (int i = 0; i < N; ++i)
+        {
+            ifft.in[i][0] = 0.0;
+            ifft.in[i][1] = 0.0;
+        }
+
+        for (int k : pilot_positions)
+        {
+            ifft.in[k][0] = 2.0;
+            ifft.in[k][1] = 0.0;
+        }
+
+        for (int i = 0; i < symbols_per_ofdm; ++i)
+        {
+            int idx = sym * symbols_per_ofdm + i;
+            int k = data_positions[i];
+
+            ifft.in[k][0] = (float)std::real(symbols[idx]);
+            ifft.in[k][1] = (float)std::imag(symbols[idx]);
+        }
+
+        fftwf_execute(ifft.plan);
+
+        for (int n = 0; n < N; ++n)
+        {
+            ifft.out[n][0] /= (float)(N / 16000.0);
+            ifft.out[n][1] /= (float)(N / 16000.0);
+        }
+
+        for (int n = N - Ncp; n < N; ++n)
+        {
+            buffer.push_back((int16_t)ifft.out[n][0]);
+            buffer.push_back((int16_t)ifft.out[n][1]);
+        }
+
+        for (int n = 0; n < N; ++n)
+        {
+            buffer.push_back((int16_t)ifft.out[n][0]);
+            buffer.push_back((int16_t)ifft.out[n][1]);
         }
     }
 }

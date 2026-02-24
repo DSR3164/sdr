@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(PlutoSDR LANGUAGES CXX)
 
 set(THIRD_PARTY_DIR ${PROJECT_SOURCE_DIR}/third_party)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
@@ -59,7 +60,7 @@ target_compile_options(implot3d PRIVATE -fPIC)
 # Core library (your code once)
 add_library(pluto_core STATIC
   src/pluto_lib.cpp
-  # src/dsp_module.cpp
+  src/dsp_module.cpp
   src/gui_module.cpp
 )
 target_include_directories(pluto_core PUBLIC
@@ -84,10 +85,14 @@ target_link_libraries(gui PRIVATE
   imgui
   implot
   implot3d
+  fftw3f_threads
+  pthread
   ${SDL2_LIBRARIES}
   ${OPENGL_LIBRARIES}
   ${GLEW_LIBRARIES}
 )
+
+set_property(TARGET gui PROPERTY CXX_INCLUDE_WHAT_YOU_USE iwyu)
 
 # Warnings (optional but полезно)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
