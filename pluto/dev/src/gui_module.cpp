@@ -4,34 +4,30 @@
 #include <SoapySDR/Device.hpp>
 #include <SoapySDR/Formats.hpp>
 #include "pluto_lib.h"
-#include <stdexcept>
 #include <cstring>
 #include <fftw3.h>
+#include <vector>
 #include "gui.h"
 
 namespace gui
 {
-    void change_modulation(sdr_config_t &sdr_config, std::vector<int16_t> &tx_buffer)
+    void change_modulation(sdr_config_t &sdr_config, std::vector<int16_t> &tx_buffer, std::vector<int> &bits)
     {
-        int N = 192000;
-        std::vector<int> bits(N);
-        gen_bits(N, bits);
-
         tx_buffer.clear();
 
         switch (sdr_config.modulation_type)
         {
         case 0:
-            bpsk_3gpp(bits, tx_buffer, false);
+            bpsk_3gpp(bits, tx_buffer);
             break;
         case 1:
-            qpsk_3gpp(bits, tx_buffer, false);
+            qpsk_3gpp(bits, tx_buffer);
             break;
         case 2:
-            qam16_3gpp(bits, tx_buffer, false);
+            qam16_3gpp(bits, tx_buffer);
             break;
         case 3:
-            qam16_3gpp_rrc(bits, tx_buffer, false);
+            qam16_3gpp_rrc(bits, tx_buffer);
             break;
         case 4:
             ofdm(bits, tx_buffer, sdr_config.n, sdr_config.ncp, sdr_config.ps);
@@ -45,50 +41,13 @@ namespace gui
 
     namespace
     {
-
-        struct FFTWPlan
-        {
-            std::vector<float> window;
-            fftwf_complex *in = nullptr;
-            fftwf_complex *out = nullptr;
-            fftwf_plan plan = nullptr;
-
-            FFTWPlan(int size) : window(size)
-            {
-                for (int i = 0; i < size; ++i)
-                    window[i] = 0.5f - 0.5f * std::cos(2.0f * float(M_PI) * float(i) / float(size - 1));
-
-                in = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
-                out = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
-                if (!in || !out)
-                    throw std::bad_alloc{};
-
-                plan = fftwf_plan_dft_1d(size, in, out, FFTW_FORWARD, FFTW_MEASURE);
-                if (!plan)
-                    throw std::runtime_error("fftwf_plan_dft_1d failed");
-            }
-
-            ~FFTWPlan()
-            {
-                if (plan)
-                    fftwf_destroy_plan(plan);
-                if (in)
-                    fftwf_free(in);
-                if (out)
-                    fftwf_free(out);
-            }
-
-            FFTWPlan(const FFTWPlan &) = delete;
-            FFTWPlan &operator=(const FFTWPlan &) = delete;
-        };
-
         FFTWPlan &fftw_singleton(int size)
         {
             static FFTWPlan p{ size };
             return p;
         }
 
-    } // namespace
+    }
 
     static inline float hann(int n, int N)
     {

@@ -84,7 +84,6 @@ target_link_libraries(gui PRIVATE
   pluto_core
   imgui
   implot
-  implot3d
   fftw3f_threads
   pthread
   ${SDL2_LIBRARIES}
@@ -92,11 +91,31 @@ target_link_libraries(gui PRIVATE
   ${GLEW_LIBRARIES}
 )
 
-set_property(TARGET gui PROPERTY CXX_INCLUDE_WHAT_YOU_USE iwyu)
+add_executable(tx src/tx.cpp)
+target_link_libraries(tx PRIVATE
+  pluto_core
+  imgui
+  implot
+  fftw3f_threads
+  pthread
+  ${SDL2_LIBRARIES}
+  ${OPENGL_LIBRARIES}
+  ${GLEW_LIBRARIES}
+)
 
-# Warnings (optional but полезно)
+
+# Warnings
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   target_compile_options(pluto_core PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion)
   target_compile_options(gui PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(tx PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(main PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+
+# set_property(TARGET gui PROPERTY CXX_INCLUDE_WHAT_YOU_USE iwyu)
+# if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+#   foreach(t main gui pluto_core tx)
+#     target_compile_options(${t} PRIVATE -fsanitize=address -g -O1)
+#     target_link_options(${t} PRIVATE -fsanitize=address)
+#   endforeach()
+# endif()

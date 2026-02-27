@@ -8,7 +8,6 @@
 #include "backends/imgui_impl_sdl2.h"
 #include "imgui.h"
 #include "implot.h"
-#include "implot3d.h"
 #include "fftw3.h"
 #include "gui.h"
 #include <dsp_module.h>
@@ -189,7 +188,6 @@ void run_gui(sdr_config_t &context)
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     ImGui::CreateContext();
     ImPlot::CreateContext();
-    ImPlot3D::CreateContext();
     SDL_GL_SetSwapInterval(0);
 
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
@@ -241,7 +239,7 @@ void run_gui(sdr_config_t &context)
             std::vector<std::complex<float>> conv(Nb);
             std::vector<std::complex<float>> raw(Nb);
             for (int i = 0; i < context.buffer_size; ++i)
-                raw[i] = std::complex<float>(context.buffer[2 * i], context.buffer[2 * i + 1]);
+                raw[i] = std::complex<float>(context.rxbuffer[2 * i], context.rxbuffer[2 * i + 1]);
             conv = convolve_ones(raw, 10);
             float max_val = 0.0f;
             for (const auto &x : conv)
@@ -253,7 +251,7 @@ void run_gui(sdr_config_t &context)
                     x = coef * x / max_val;
             }
 
-            gui::compute_fftw(context.buffer, fft_vec);
+            gui::compute_fftw(context.rxbuffer, fft_vec);
             sync = costas_loop(conv, costas_band);
             demodul = gardner(sync, gardner_band, 10);
             for (int i = 0; i < context.buffer_size; ++i)
@@ -264,6 +262,10 @@ void run_gui(sdr_config_t &context)
                 sync_q[i] = std::imag(sync[i]);
                 conv_i[i] = std::real(conv[i]);
                 conv_q[i] = std::imag(conv[i]);
+            }
+
+            for (size_t i = 0; i < demodul.size(); ++i)
+            {
                 gardner_i[i] = std::real(demodul[i]);
                 gardner_q[i] = std::imag(demodul[i]);
             }
@@ -433,7 +435,7 @@ void run_gui(sdr_config_t &context)
                         reset_view = true;
                     ImPlot::EndLegendPopup();
                 }
-                ImPlot::PlotScatter("Const", gardner_i.data(), gardner_q.data(), context.buffer_size);
+                ImPlot::PlotScatter("Const", gardner_i.data(), gardner_q.data(), std::min(gardner_i.size(), gardner_q.size()));
                 ImPlot::EndPlot();
             }
             ImGui::End();
@@ -466,13 +468,13 @@ void run_gui(sdr_config_t &context)
         if (now - last_wf > (1.0 / 60.0))
         {
             static std::vector<int16_t> iqpad(gui::NFFT * 2, 0);
-            int avail_complex = std::min((int)context.buffer.size() / 2, 1920);
+            int avail_complex = std::min((int)context.rxbuffer.size() / 2, 1920);
             for (int n = 0; n < gui::NFFT; n++)
             {
                 if (n < avail_complex)
                 {
-                    iqpad[2 * n + 0] = context.buffer[2 * n + 0];
-                    iqpad[2 * n + 1] = context.buffer[2 * n + 1];
+                    iqpad[2 * n + 0] = context.rxbuffer[2 * n + 0];
+                    iqpad[2 * n + 1] = context.rxbuffer[2 * n + 1];
                 }
                 else
                 {
@@ -526,7 +528,7 @@ void run_gui(sdr_config_t &context)
         ImGui::End();
 
         ImGui::Begin("Spectrum");
-        gui::compute_fftw(context.buffer, spec_db);
+        gui::compute_fftw(context.rxbuffer, spec_db);
         spec_smooth.resize(spec_db.size());
         for (int i = 0; i < spec_db.size(); ++i)
             spec_smooth[i] = alpha * spec_db[i] + (1.0f - alpha) * spec_smooth[i];
@@ -566,7 +568,6 @@ void run_gui(sdr_config_t &context)
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImPlot::DestroyContext();
-    ImPlot3D::DestroyContext();
     ImGui::DestroyContext();
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
@@ -594,7 +595,7 @@ int sdr_backend(sdr_config_t &context)
     gen_bits(N, bits);
     qpsk_3gpp(bits, tx_buffer, true);
 
-    void *rx_buffs[] = { context.buffer.data() };
+    void *rx_buffs[] = { context.rxbuffer.data() };
     void *tx_buffs[] = { tx_buffer.data() };
 
     int flags = SOAPY_SDR_HAS_TIME;
@@ -612,7 +613,7 @@ int sdr_backend(sdr_config_t &context)
             apply_runtime(context);
         if (has_flag(context.flags, Flags::REMODULATION))
         {
-            gui::change_modulation(context, tx_buffer);
+            gui::change_modulation(context, tx_buffer, bits);
             k = 0;
             buff_count = (float)(tx_buffer.size() / (context.buffer_size * 2));
         }
@@ -631,7 +632,7 @@ int sdr_backend(sdr_config_t &context)
         while (total < context.buffer_size)
         {
             void *buffs[] = {
-                context.buffer.data() + total * 2 };
+                context.rxbuffer.data() + total * 2 };
 
             int ret = context.sdr->readStream(
                 context.rxStream,
