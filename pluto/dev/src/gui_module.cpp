@@ -8,10 +8,11 @@
 #include <fftw3.h>
 #include <vector>
 #include "gui.h"
+#include "dsp_module.h"
 
 namespace gui
 {
-    void change_modulation(sdr_config_t &sdr_config, std::vector<int16_t> &tx_buffer, std::vector<int> &bits)
+    void change_modulation(sdr_config_t &sdr_config, std::vector<int16_t> &tx_buffer, std::vector<int> &bits, SharedData_t &data, int ofdm_mod)
     {
         tx_buffer.clear();
 
@@ -30,7 +31,7 @@ namespace gui
             qam16_3gpp_rrc(bits, tx_buffer);
             break;
         case 4:
-            ofdm(bits, tx_buffer, sdr_config.n, sdr_config.ncp, sdr_config.ps);
+            ofdm(bits, tx_buffer, data.mod.n, data.mod.ncp, data.mod.ps, ofdm_mod);
             break;
         default:
             break;
@@ -54,21 +55,21 @@ namespace gui
         return 0.5f - 0.5f * std::cos(2.0f * (float)M_PI * (float)n / (float)(N - 1));
     }
 
-    void compute_fftw(const std::vector<int16_t> &iq, std::vector<float> &out_db)
+    void compute_fftw(const std::vector<std::complex<float>> &iq, std::vector<float> &out_db)
     {
-        static const int maxim = (int)(iq.size() / 2);
-        static std::vector<float> avg(maxim, 0.0f);
+        size_t maxim = iq.size();
+        std::vector<float> avg(maxim, 0.0f);
         float alpha = 0.1f;
         auto &p = fftw_singleton(maxim);
 
         out_db.clear();
         out_db.resize(maxim);
 
-        for (int i = 0; i < maxim; ++i)
+        for (size_t i = 0; i < maxim; ++i)
         {
             constexpr float inv = 1.0f / 32768.0f;
-            float re = float(iq[2 * i + 0]) * inv;
-            float im = float(iq[2 * i + 1]) * inv;
+            float im = std::real(iq[i]) * inv;
+            float re = std::imag(iq[i]) * inv;
             p.in[i][0] = re * p.window[i];
             p.in[i][1] = im * p.window[i];
         }
@@ -76,7 +77,7 @@ namespace gui
         fftwf_execute(p.plan);
 
         constexpr float eps = 1e-12f;
-        for (int i = 0; i < maxim; ++i)
+        for (size_t i = 0; i < maxim; ++i)
         {
             int idx = (i + maxim / 2) % maxim;
             float re = p.out[idx][0];

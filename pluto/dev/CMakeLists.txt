@@ -91,24 +91,24 @@ target_link_libraries(gui PRIVATE
   ${GLEW_LIBRARIES}
 )
 
-add_executable(tx src/tx.cpp)
-target_link_libraries(tx PRIVATE
-  pluto_core
-  imgui
-  implot
-  fftw3f_threads
-  pthread
-  ${SDL2_LIBRARIES}
-  ${OPENGL_LIBRARIES}
-  ${GLEW_LIBRARIES}
-)
+# add_executable(tx src/tx.cpp)
+# target_link_libraries(tx PRIVATE
+#   pluto_core
+#   imgui
+#   implot
+#   fftw3f_threads
+#   pthread
+#   ${SDL2_LIBRARIES}
+#   ${OPENGL_LIBRARIES}
+#   ${GLEW_LIBRARIES}
+# )
 
 
 # Warnings
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   target_compile_options(pluto_core PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion)
   target_compile_options(gui PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(tx PRIVATE -Wall -Wextra -Wpedantic)
+  # target_compile_options(tx PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(main PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 

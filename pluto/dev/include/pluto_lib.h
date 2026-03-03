@@ -86,9 +86,6 @@ typedef struct sdr_config_s
 
     std::vector<int16_t> rxbuffer;
     std::vector<int16_t> txbuffer;
-    int n;
-    int ncp;
-    int ps;
     size_t channels[1] = { 0 };
     SoapySDR::Device *sdr;
     SoapySDR::Stream *rxStream;
@@ -109,9 +106,6 @@ typedef struct sdr_config_s
         tx_bandwidth(10e6),
         tx_gain(tx_g),
         rx_gain(rx_g),
-        n(128),
-        ncp(32),
-        ps(125),
         channels{ 0 },
         sdr(nullptr),
         rxStream(nullptr),
@@ -164,6 +158,38 @@ struct FFTWPlan
             fftwf_free(out);
     }
 
+    // move constructor
+    FFTWPlan(FFTWPlan &&other) noexcept
+        : window(std::move(other.window)),
+        in(other.in),
+        out(other.out),
+        plan(other.plan)
+    {
+        other.in = nullptr;
+        other.out = nullptr;
+        other.plan = nullptr;
+    }
+
+    // move assignment
+    FFTWPlan &operator=(FFTWPlan &&other) noexcept
+    {
+        if (this != &other)
+        {
+            if (plan) fftwf_destroy_plan(plan);
+            if (in)   fftwf_free(in);
+            if (out)  fftwf_free(out);
+
+            window = std::move(other.window);
+            in = other.in;
+            out = other.out;
+            plan = other.plan;
+
+            other.in = nullptr;
+            other.out = nullptr;
+            other.plan = nullptr;
+        }
+        return *this;
+    }
     FFTWPlan(const FFTWPlan &) = delete;
     FFTWPlan &operator=(const FFTWPlan &) = delete;
 };
@@ -376,7 +402,7 @@ void qam16_3gpp_rrc(const std::vector<int> &bits, std::vector<int16_t> &buffer, 
  * \param Ncp Length of cyclic prefix.
  * \param pilot_spacing Spacing between pilot subcarriers, default is 4.
 */
-void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int Ncp, int pilot_spacing = 4);
+void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int Ncp, int pilot_spacing = 4, int modulation_type = 2);
 
 /*!
  * \brief Insert a Barker sequence into the symbol buffer for synchronization.
@@ -397,3 +423,5 @@ void implement_barker(std::vector<int16_t> &symbols, int sps = 10);
  * \param bits Output vector of bits.
 */
 void gen_bits(int N, std::vector<int> &bits);
+
+std::vector<std::complex<float>> generate_minn_preamble(size_t N);

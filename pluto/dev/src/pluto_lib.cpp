@@ -202,20 +202,51 @@ void qam16_3gpp_rrc(const std::vector<int> &bits, std::vector<int16_t> &buffer, 
     }
 }
 
-void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int Ncp, int pilot_spacing)
+std::vector<std::complex<float>> generate_zc(int L, int q)
+{
+    std::vector<std::complex<float>> zc(L);
+
+    for (int n = 0; n < L; ++n)
+    {
+        float phase = -M_PIf * q * n * (n + 1) / L;
+        zc[n] = std::exp(std::complex<float>(0, phase));
+    }
+
+    return zc;
+}
+
+void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int Ncp, int pilot_spacing, int modulation_type)
 {
     if (N < 4)
         return;
 
-    buffer.resize(0);
     buffer.clear();
-    std::vector<std::complex<double>> symbols(bits.size() / 2);
-    qpsk_mapper_3gpp(bits, symbols);
+    buffer.resize(0);
+    std::vector<std::complex<double>> symbols(bits.size() / 1);
+    std::vector<std::complex<float>> schmidl(N);
+    auto zc = generate_zc(63, 5);
+    switch (modulation_type)
+    {
+    case 0:
+        bpsk_mapper_3gpp(bits, symbols);
+        break;
+    case 1:
+        symbols.resize(bits.size() / 2);
+        qpsk_mapper_3gpp(bits, symbols);
+        break;
+    case 2:
+        symbols.resize(bits.size() / 4);
+        qam16_mapper_3gpp(bits, symbols);
+        break;
+    default:
+        symbols.resize(bits.size() / 4);
+        qam16_mapper_3gpp(bits, symbols);
+        break;
+    }
 
     FFTWPlan ifft(N, false);
 
     int total_qpsk = (int)symbols.size();
-
     std::vector<int> data_positions;
     std::vector<int> pilot_positions;
 
@@ -227,58 +258,75 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int
             continue;
 
         if (counter % pilot_spacing == 0)
+        {
             pilot_positions.push_back(k);
+        }
         else
             data_positions.push_back(k);
 
         counter++;
     }
 
-    for (int i = 0; i < N; i += 2)
+    int symbols_per_ofdm = static_cast<int>(data_positions.size());
+    int num_ofdm_symbols = total_qpsk / symbols_per_ofdm;
+
+    buffer.reserve((num_ofdm_symbols + Ncp) * (N + 2));
+
+    // auto preamble = generate_minn_preamble(N);
+
+    for (int i = 0; i < N; i += 4)
     {
-        ifft.in[i][0] = 1.0;
-        ifft.in[i][1] = 0.0;
+        ifft.in[i][0] = 1.0f;
+        ifft.in[i + 2][0] = -1.0f;
     }
 
     fftwf_execute(ifft.plan);
 
+    //Norm
     for (int n = 0; n < N; ++n)
     {
         ifft.out[n][0] /= (float)(N / (3.0 * 16000.0));
         ifft.out[n][1] /= (float)(N / (3.0 * 16000.0));
     }
 
-    for (int n = N - Ncp; n < N; ++n)
-    {
-        buffer.push_back((int16_t)ifft.out[n][0]);
-        buffer.push_back((int16_t)ifft.out[n][1]);
-    }
+    // //Cyclic Prefix
+    // for (int n = N - Ncp; n < N; ++n)
+    // {
+    //     buffer.push_back((int16_t)ifft.out[n][0]);
+    //     buffer.push_back((int16_t)ifft.out[n][1]);
+    // }
+
+    //Data
+    // for (int n = 0; n < N; ++n)
+    // {
+    //     buffer.push_back((int16_t)ifft.out[n][0]);
+    //     buffer.push_back((int16_t)ifft.out[n][1]);
+    // }
 
     for (int n = 0; n < N; ++n)
     {
-        buffer.push_back((int16_t)ifft.out[n][0]);
-        buffer.push_back((int16_t)ifft.out[n][1]);
+        if (n % ((N - N / 6) / 4) == 0 and n != 0)
+            buffer.push_back(((n > N / 2) ? -24000 : 24000));
+        else
+            buffer.push_back(0);
+        buffer.push_back(0);
     }
-
-
-    int symbols_per_ofdm = static_cast<int>(data_positions.size());
-    int num_ofdm_symbols = total_qpsk / symbols_per_ofdm;
 
     for (int sym = 0; sym < num_ofdm_symbols; ++sym)
     {
         for (int i = 0; i < N; ++i)
         {
-            ifft.in[i][0] = 0.0;
-            ifft.in[i][1] = 0.0;
+            ifft.in[i][0] = 0.0f;
+            ifft.in[i][1] = 0.0f;
         }
 
         for (int k : pilot_positions)
         {
-            ifft.in[k][0] = 2.0;
-            ifft.in[k][1] = 0.0;
+            ifft.in[k][0] = 1.0f;
+            ifft.in[k][1] = 0.0f;
         }
 
-        for (int i = 0; i < symbols_per_ofdm; ++i)
+        for (int i = 0; i < data_positions.size(); ++i)
         {
             int idx = sym * symbols_per_ofdm + i;
             int k = data_positions[i];
@@ -289,18 +337,21 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int
 
         fftwf_execute(ifft.plan);
 
+        //Norm
         for (int n = 0; n < N; ++n)
         {
-            ifft.out[n][0] /= (float)(N / (3.0 * 16000.0));
-            ifft.out[n][1] /= (float)(N / (3.0 * 16000.0));
+            ifft.out[n][0] /= (float)(N / (3.0 * 16000.0f));
+            ifft.out[n][1] /= (float)(N / (3.0 * 16000.0f));
         }
 
+        //Cyclic Prefix
         for (int n = N - Ncp; n < N; ++n)
         {
             buffer.push_back((int16_t)ifft.out[n][0]);
             buffer.push_back((int16_t)ifft.out[n][1]);
         }
 
+        //Data
         for (int n = 0; n < N; ++n)
         {
             buffer.push_back((int16_t)ifft.out[n][0]);
@@ -461,4 +512,14 @@ void apply_runtime(sdr_config_t &context)
         context.sdr->setSampleRate(SOAPY_SDR_TX, 0, context.sample_rate);
         context.flags &= ~Flags::APPLY_SAMPLE_RATE;
     }
+}
+
+std::vector<std::complex<float>> generate_minn_preamble(size_t N)
+{
+    std::vector<std::complex<float>> freq(N, { 0,0 });
+
+    for (size_t k = 1; k < N; k += 4)
+        freq[k] = std::complex<float>{ 1.0, 0 }; // BPSK
+
+    return freq;
 }
