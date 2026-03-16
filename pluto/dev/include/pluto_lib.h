@@ -103,7 +103,7 @@ typedef struct sdr_config_s
         tx_carrier_freq(tx_f),
         rx_carrier_freq(rx_f),
         rx_bandwidth(10e6),
-        tx_bandwidth(10e6),
+        tx_bandwidth(1e6),
         tx_gain(tx_g),
         rx_gain(rx_g),
         channels{ 0 },
@@ -425,3 +425,4 @@ void implement_barker(std::vector<int16_t> &symbols, int sps = 10);
 void gen_bits(int N, std::vector<int> &bits);
 
 std::vector<std::complex<float>> generate_minn_preamble(size_t N);
+std::vector<std::complex<float>> generate_zc(int L, int q);

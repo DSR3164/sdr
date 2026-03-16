@@ -113,3 +113,299 @@ std::vector<std::complex<float>> convolve_ones(const std::vector<std::complex<fl
 
     return y;
 }
+
+int ofdm_zc_corr(const std::vector<std::complex<float>> &r, const std::vector<std::complex<float>> &zc, std::vector<float> &plato)
+{
+
+    const int N = zc.size();
+    const int L = r.size();
+
+    int best_pos = -1;
+    float best_val = 0;
+
+    const float *rptr = reinterpret_cast<const float *>(r.data());
+    const float *zptr = reinterpret_cast<const float *>(zc.data());
+
+    float zc_energy = 0;
+    for (int n = 0; n < N; n++)
+    {
+        float br = zptr[2 * n];
+        float bi = zptr[2 * n + 1];
+        zc_energy += br * br + bi * bi;
+    }
+
+    for (int k = 0; k <= L - N; k++)
+    {
+        float re = 0, im = 0;
+        float energy = 0;
+
+        const float *rp = rptr + 2 * k;
+
+        for (int n = 0; n < N; n++)
+        {
+            float ar = rp[2 * n];
+            float ai = rp[2 * n + 1];
+
+            float br = zptr[2 * n];
+            float bi = zptr[2 * n + 1];
+
+            re += ar * br + ai * bi;
+            im += ai * br - ar * bi;
+
+            energy += ar * ar + ai * ai;
+        }
+
+        float corr = re * re + im * im;
+        float v = corr / (energy * zc_energy + 1e-12f);
+
+        plato[k] = v;
+
+        if (v > best_val and v > 0.4)
+        {
+            best_val = v;
+            best_pos = k;
+        }
+    }
+
+    return best_pos;
+}
+
+int ofdm_cp_sync(const std::vector<std::complex<float>> &r, int N, int Lcp, std::vector<float> &plato)
+{
+    int size = r.size();
+    float max_metric = 0.0f;
+    int max_index = -1;
+
+    std::complex<float> P = 0.0f;
+    float R = 0.0f;
+    int timeout = 3;
+
+    for (int i = 0; i < Lcp; i++)
+    {
+        P += r[i] * std::conj(r[i + N]);
+        R += std::norm(r[i + N]);
+    }
+
+    for (int d = 0; d < size - N - Lcp; d++)
+    {
+
+        float metric = std::norm(P) / (R * R + 1e-12f);
+
+        if (metric > max_metric
+            and metric > 0.75
+            and d > 150)
+        {
+            max_metric = metric;
+            max_index = d;
+        }
+        else if (max_metric > metric and metric > 0.75
+            and d > 150)
+        {
+            if (timeout)
+                timeout -= 1;
+            else
+                return max_metric;
+        }
+
+        if (d + 1 >= size - N - Lcp)
+            break;
+
+        P -= r[d] * std::conj(r[d + N]);
+        P += r[d + Lcp] * std::conj(r[d + N + Lcp]);
+
+        R -= std::norm(r[d + N]);
+        R += std::norm(r[d + N + Lcp]);
+        plato[d] = metric;
+    }
+
+    return max_index;
+}
+
+void ofdm_equalize(std::vector<std::complex<float>> input, std::vector<std::complex<float>> &output, int N, int ps)
+{
+    output.clear();
+    output.reserve(10 * 127);
+    const int DC = N / 2;
+    const std::complex<float> known_pilot = { 2.0f, 0.0f };
+
+    std::vector<int> pilots;
+    std::vector<bool> is_pilot(N, false);
+
+    int counter = 0;
+    for (int k = 1; k < N; ++k)
+    {
+        if (k > N / 2 - 28 and k < N / 2 + 27)
+        {
+            is_pilot[k] = true;
+            continue;
+        }
+        if (counter % ps == 0)
+        {
+            pilots.push_back(k);
+            is_pilot[k] = true;
+        }
+        counter++;
+    }
+    is_pilot[DC] = true;
+
+    std::vector<std::complex<float>> H_prev(N, { 1,0 });
+
+    for (size_t i = 0; i + N <= input.size(); i += N)
+    {
+        std::vector<std::complex<float>> sym(input.begin() + i,
+            input.begin() + i + N);
+
+        std::vector<std::complex<float>> H(N, { 0,0 });
+        std::vector<std::complex<float>> equalized(N);
+
+        for (auto k : pilots)
+            H[k] = sym[k] / known_pilot;
+
+        for (size_t p = 0; p < pilots.size() - 1; ++p)
+        {
+            int k1 = pilots[p];
+            int k2 = pilots[p + 1];
+
+            auto H1 = H[k1];
+            auto H2 = H[k2];
+
+            float a1 = std::arg(H1);
+            float a2 = std::arg(H2);
+
+            float da = a2 - a1;
+            if (da > M_PI) da -= 2 * M_PI;
+            if (da < -M_PI) da += 2 * M_PI;
+
+            float m1 = std::abs(H1);
+            float m2 = std::abs(H2);
+
+            for (int k = k1 + 1; k < k2; ++k)
+            {
+                if (k == DC) continue;
+
+                float alpha = float(k - k1) / float(k2 - k1);
+
+                float a = a1 + alpha * da;
+                float m = m1 + alpha * (m2 - m1);
+
+                H[k] = std::polar(m, a);
+            }
+        }
+
+        for (int k = 0; k < pilots.front(); ++k)
+            if (k != DC) H[k] = H[pilots.front()];
+
+        for (int k = pilots.back() + 1; k < N; ++k)
+            if (k != DC) H[k] = H[pilots.back()];
+
+        for (int k = 1; k < N; ++k)
+            if (std::abs(H[k]) > 1e-12f)
+                equalized[k] = sym[k] / H[k];
+            else
+                equalized[k] = sym[k];
+
+        float phase = 0;
+        for (auto k : pilots)
+            phase += std::arg(equalized[k] / known_pilot);
+
+        phase /= pilots.size();
+
+        std::complex<float> rot = std::exp(std::complex<float>(0, -phase));
+
+        for (int k = 0; k < N; ++k)
+            if (k != DC)
+                equalized[k] *= rot;
+
+        for (int k = 1; k < N; ++k)
+            if (!is_pilot[k])
+                output.push_back(equalized[k]);
+    }
+
+}
+
+float estimate_cfo(const std::vector<std::complex<float>> &rx, int N, int max_index, float Fs)
+{
+    int L = N / 2;
+    std::complex<float> P_cfo(0.0f, 0.0f);
+
+    for (int n = 0; n < L; ++n)
+        P_cfo += rx[max_index + n] * std::conj(rx[max_index + n + L]);
+
+    float Ts = 1.0f / Fs;
+    float cfo = std::arg(P_cfo) / (2.0f * M_PI * L * Ts);
+
+    return cfo;
+}
+
+float schmidl_cox_detect(const std::vector<std::complex<float>> &rx, int N, float &cfo_est, int &max_index, std::vector<float> &plato)
+{
+    plato.resize(0);
+    plato.reserve(1920);
+
+    size_t L = N / 2;
+    int size = rx.size();
+
+    if (size < N + 1)
+        return -1;
+
+    std::complex<float> P = 0.0f;
+    float R = 0.0f;
+    float metric = 0.0f;
+    float max_metric = 0.0f;
+    size_t rx_size = rx.size();
+    if (rx_size < N)
+        return 0.0f;
+    for (size_t i = 0; i + N <= rx_size; ++i)
+    {
+        metric = 0.0f;
+        for (size_t n = 0; n < L; ++n)
+        {
+            P += rx[n + i] * std::conj(rx[n + L + i]);
+            R += std::norm(rx[n + L + i]);
+        }
+        metric = std::norm(P) / std::norm(R);
+        plato.push_back(metric);
+        if (metric > max_metric)
+        {
+            max_index = i;
+            max_metric = metric;
+        }
+    }
+
+    return max_metric;
+}
+
+std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(SharedData_t &data)
+{
+    FFTWPlan ifft(data.mod.n, false);
+    std::vector<std::complex<float>> zadoff_chu;
+    auto zc = generate_zc(127, 5);
+    zadoff_chu.reserve(data.mod.n);
+    ifft.in[0][0] = 0;
+    ifft.in[0][1] = 0;
+
+    for (size_t i = 1; i <= 63; ++i)
+    {
+        ifft.in[i][0] = zc[i - 1].real();
+        ifft.in[i][1] = zc[i - 1].imag();
+    }
+
+    for (size_t i = 64; i <= 127; ++i)
+    {
+        ifft.in[i][0] = zc[i - 1].real();
+        ifft.in[i][1] = zc[i - 1].imag();
+    }
+
+    fftwf_execute(ifft.plan);
+
+    for (int n = 0; n < data.mod.n; ++n)
+    {
+        ifft.out[n][0] /= (float)(data.mod.n / (3.0 * 16000.0));
+        ifft.out[n][1] /= (float)(data.mod.n / (3.0 * 16000.0));
+    }
+
+    for (int n = 0; n < data.mod.n; ++n)
+        zadoff_chu.push_back(std::complex<float>(ifft.out[n][0], ifft.out[n][1]));
+
+    return zadoff_chu;
+};

@@ -34,6 +34,15 @@ void qam16_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<do
         / sqrt(10.0);
 }
 
+void qam128_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols)
+{
+    for (size_t i = 0; i < symbols.size(); ++i)
+        symbols[i] = std::complex<double>(
+            (1 - 2 * bits[7 * i + 0]) * (4 - (1 - 2 * bits[7 * i + 2]) * (2 - (1 - 2 * bits[7 * i + 4]))),
+            (1 - 2 * bits[7 * i + 1]) * (4 - (1 - 2 * bits[7 * i + 3]) * (2 - (1 - 2 * bits[7 * i + 5]))))
+        / sqrt(42.0);
+}
+
 void upsample(const std::vector<std::complex<double>> &symbols, std::vector<std::complex<double>> &upsampled, int up)
 {
     if (upsampled.size() < symbols.size() * up)
@@ -217,14 +226,13 @@ std::vector<std::complex<float>> generate_zc(int L, int q)
 
 void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int Ncp, int pilot_spacing, int modulation_type)
 {
-    if (N < 4)
+    if (N < 4 or pilot_spacing < 2)
         return;
 
     buffer.clear();
-    buffer.resize(0);
     std::vector<std::complex<double>> symbols(bits.size() / 1);
     std::vector<std::complex<float>> schmidl(N);
-    auto zc = generate_zc(63, 5);
+    auto zc = generate_zc(127, 5);
     switch (modulation_type)
     {
     case 0:
@@ -237,6 +245,10 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int
     case 2:
         symbols.resize(bits.size() / 4);
         qam16_mapper_3gpp(bits, symbols);
+        break;
+    case 3:
+        symbols.resize(bits.size() / 7);
+        qam128_mapper_3gpp(bits, symbols);
         break;
     default:
         symbols.resize(bits.size() / 4);
@@ -254,7 +266,7 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int
 
     for (int k = 1; k < N; ++k)
     {
-        if (k == N / 2)
+        if (k > N / 2 - 28 and k < N / 2 + 27)
             continue;
 
         if (counter % pilot_spacing == 0)
@@ -272,12 +284,19 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int
 
     buffer.reserve((num_ofdm_symbols + Ncp) * (N + 2));
 
-    // auto preamble = generate_minn_preamble(N);
+    ifft.in[0][0] = 0;
+    ifft.in[0][1] = 0;
 
-    for (int i = 0; i < N; i += 4)
+    for (size_t i = 1; i <= 63; ++i)
     {
-        ifft.in[i][0] = 1.0f;
-        ifft.in[i + 2][0] = -1.0f;
+        ifft.in[i][0] = zc[i - 1].real();
+        ifft.in[i][1] = zc[i - 1].imag();
+    }
+
+    for (size_t i = 64; i <= 127; ++i)
+    {
+        ifft.in[i][0] = zc[i - 1].real();
+        ifft.in[i][1] = zc[i - 1].imag();
     }
 
     fftwf_execute(ifft.plan);
@@ -289,27 +308,18 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int
         ifft.out[n][1] /= (float)(N / (3.0 * 16000.0));
     }
 
-    // //Cyclic Prefix
-    // for (int n = N - Ncp; n < N; ++n)
-    // {
-    //     buffer.push_back((int16_t)ifft.out[n][0]);
-    //     buffer.push_back((int16_t)ifft.out[n][1]);
-    // }
+    //Cyclic Prefix
+    for (int n = N - Ncp; n < N; ++n)
+    {
+        buffer.push_back((int16_t)ifft.out[n][0]);
+        buffer.push_back((int16_t)ifft.out[n][1]);
+    }
 
     //Data
-    // for (int n = 0; n < N; ++n)
-    // {
-    //     buffer.push_back((int16_t)ifft.out[n][0]);
-    //     buffer.push_back((int16_t)ifft.out[n][1]);
-    // }
-
     for (int n = 0; n < N; ++n)
     {
-        if (n % ((N - N / 6) / 4) == 0 and n != 0)
-            buffer.push_back(((n > N / 2) ? -24000 : 24000));
-        else
-            buffer.push_back(0);
-        buffer.push_back(0);
+        buffer.push_back((int16_t)ifft.out[n][0]);
+        buffer.push_back((int16_t)ifft.out[n][1]);
     }
 
     for (int sym = 0; sym < num_ofdm_symbols; ++sym)
