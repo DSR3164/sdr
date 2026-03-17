@@ -11,6 +11,7 @@ namespace gui
     inline constexpr int NFFTW = NFFT / 2;
     inline constexpr int WF_H = 400;
 
+    int context_edit_window(sdr_config_t &context, SharedData_t &data);
     void compute_fftw(const std::vector<std::complex<float>> &iq, std::vector<float> &out_db);
     void compute_hz(sdr_config_t &context, std::vector<float> &x_hz);
     void change_modulation(sdr_config_t &sdr_config, std::vector<int16_t> &tx_buffer, std::vector<int> &bits, SharedData_t &data, int ofdm_mod);

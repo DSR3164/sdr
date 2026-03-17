@@ -63,29 +63,73 @@ class DoubleBuffer {
 
 typedef struct SharedData
 {
-    std::vector<int16_t> tx[2];
-    std::vector<int16_t> rx[2];
     DoubleBuffer<int16_t> dsp_buff;
     DoubleBuffer<std::complex<float>> gui_buff;
-    std::vector<std::complex<float>> receive_history;
     std::vector<float> signal_spectrum;
+
+    struct DSP
+    {
+        double gardner_band = 1;
+        double costas_band = 15e-4;
+        float scale_coef = 1.0f;
+
+        bool changed = false;
+
+        float threshold = 0.6f;
+        float timed = 1.0f;
+        int countdown = 0;
+
+        float cfo = 0.0f;
+        int max_index = 0;
+        int offset = 0;
+    } dsp;
+
+    struct OFDMConfig
+    {
+        int mod = 2;
+
+        bool pss = true;
+        bool symbol_sync = false;
+        bool eq = true;
+        bool fft = true;
+        int n_subcarriers;
+        int pilot_spacing;
+        int n_cp;
+        bool cfo;
+    } ofdm_cfg;
+
+    struct GUI
+    {
+        std::vector<float> metrics;
+        std::vector<std::vector<float>> waterfall;
+        std::vector<float> plato;
+
+        bool stopped = false;
+        bool can_be_stopped = false;
+        bool debug = false;
+        bool fps_lock = true;
+        float timed = 1.0f;
+
+        bool x_init = false;
+    } gui;
+
+    struct History
+    {
+        std::vector<int> send;
+        std::vector<std::complex<float>> receive;
+        std::vector<float> sdrtime;
+        std::vector<float> dsptime;
+    } history;
 
     struct Modulation
     {
         int ModulationType;
-        int n; // N Subcarriers
-        int ncp; // Len of CP
-        int ps; // Spacing between pilots
 
         std::vector<std::complex<float>> raw;
         std::vector<std::complex<float>> conv;
         std::vector<std::complex<float>> sync;
         std::vector<std::complex<float>> demodul;
-
         std::vector<std::complex<float>> ofdm;
-
-        bool cfo;
-
     } mod;
 
     SharedData(int samples_in_buffer, int n, int ncp, int ps, int mod_type)
@@ -93,21 +137,25 @@ typedef struct SharedData
         dsp_buff(samples_in_buffer * 2),
         gui_buff(samples_in_buffer * 2)
     {
-        rx[0].resize(samples_in_buffer * 2, 0);
-        rx[1].resize(samples_in_buffer * 2, 0);
-        tx[0].resize(samples_in_buffer * 2, 0);
-        tx[1].resize(samples_in_buffer * 2, 0);
-        receive_history.reserve(samples_in_buffer * 11);
+        history.receive.reserve(samples_in_buffer * 11);
+
         mod.raw.resize(samples_in_buffer);
         mod.conv.resize(samples_in_buffer);
         mod.sync.resize(samples_in_buffer);
         mod.demodul.resize(samples_in_buffer);
         mod.ofdm.resize(samples_in_buffer);
+
         mod.ModulationType = mod_type;
-        mod.n = n;
-        mod.ncp = ncp;
-        mod.ps = ps;
-        mod.cfo = 0;
+        ofdm_cfg.n_subcarriers = n;
+        ofdm_cfg.pilot_spacing = ps;
+        ofdm_cfg.n_cp = ncp;
+        ofdm_cfg.cfo = 0;
+        gui.plato.resize(1920);
+        gui.metrics.resize(1920);
+        history.dsptime.resize(1920);
+        history.sdrtime.resize(1920);
+        history.send.resize(1920);
+        history.receive.resize(1920);
     }
 
 } SharedData_t;

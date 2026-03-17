@@ -377,10 +377,10 @@ float schmidl_cox_detect(const std::vector<std::complex<float>> &rx, int N, floa
 
 std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(SharedData_t &data)
 {
-    FFTWPlan ifft(data.mod.n, false);
+    FFTWPlan ifft(data.ofdm_cfg.n_subcarriers, false);
     std::vector<std::complex<float>> zadoff_chu;
     auto zc = generate_zc(127, 5);
-    zadoff_chu.reserve(data.mod.n);
+    zadoff_chu.reserve(data.ofdm_cfg.n_subcarriers);
     ifft.in[0][0] = 0;
     ifft.in[0][1] = 0;
 
@@ -398,13 +398,13 @@ std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(SharedData_t &data)
 
     fftwf_execute(ifft.plan);
 
-    for (int n = 0; n < data.mod.n; ++n)
+    for (int n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
     {
-        ifft.out[n][0] /= (float)(data.mod.n / (3.0 * 16000.0));
-        ifft.out[n][1] /= (float)(data.mod.n / (3.0 * 16000.0));
+        ifft.out[n][0] /= (float)(data.ofdm_cfg.n_subcarriers / (3.0 * 16000.0));
+        ifft.out[n][1] /= (float)(data.ofdm_cfg.n_subcarriers / (3.0 * 16000.0));
     }
 
-    for (int n = 0; n < data.mod.n; ++n)
+    for (int n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
         zadoff_chu.push_back(std::complex<float>(ifft.out[n][0], ifft.out[n][1]));
 
     return zadoff_chu;
