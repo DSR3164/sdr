@@ -1,4 +1,5 @@
 #include <dsp_module.h>
+#include <pluto_lib.h>
 
 #include <vector>
 #include <complex>
@@ -160,7 +161,7 @@ int ofdm_zc_corr(const std::vector<std::complex<float>> &r, const std::vector<st
 
         plato[k] = v;
 
-        if (v > best_val and v > 0.4)
+        if (v > best_val)
         {
             best_val = v;
             best_pos = k;
@@ -221,10 +222,8 @@ int ofdm_cp_sync(const std::vector<std::complex<float>> &r, int N, int Lcp, std:
     return max_index;
 }
 
-void ofdm_equalize(std::vector<std::complex<float>> input, std::vector<std::complex<float>> &output, int N, int ps)
+void ofdm_equalize(std::vector<std::complex<float>> &input, int N, int ps)
 {
-    output.clear();
-    output.reserve(10 * 127);
     const int DC = N / 2;
     const std::complex<float> known_pilot = { 2.0f, 0.0f };
 
@@ -318,7 +317,9 @@ void ofdm_equalize(std::vector<std::complex<float>> input, std::vector<std::comp
 
         for (int k = 1; k < N; ++k)
             if (!is_pilot[k])
-                output.push_back(equalized[k]);
+                input[k + i] = (equalized[k]);
+            else
+                input[k + i] = { 0.0f, 0.0f };
     }
 
 }
@@ -409,3 +410,36 @@ std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(SharedData_t &data)
 
     return zadoff_chu;
 };
+
+std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> &signal, SharedData &data, sdr_config_s &context)
+{
+    int N = data.ofdm_cfg.n_subcarriers;
+    int CP = data.ofdm_cfg.n_cp;
+    float fs = context.sample_rate;
+    int start = data.dsp.max_index + N;
+    std::complex<float> corr = 0;
+
+
+
+    for (int n = start; n < start + CP; n++)
+    {
+        if (signal.size() < start + 2 * N + CP)
+            break;
+        corr += std::conj(signal[n]) * signal[n + N];
+    }
+
+    float epsilon = std::arg(corr) / (2 * M_PI);
+
+    float delta_f = epsilon * fs / N;
+
+    data.dsp.cfo = delta_f;
+
+    std::vector<std::complex<float>> corrected = signal;
+    for (size_t n = start; n < signal.size(); n++)
+    {
+        float phase = -2 * M_PIf * delta_f * n / fs;
+        corrected[n] *= std::complex<float>(std::cos(phase), std::sin(phase));
+    }
+
+    return corrected;
+}

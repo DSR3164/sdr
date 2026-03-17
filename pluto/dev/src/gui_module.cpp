@@ -188,7 +188,7 @@ namespace gui
         static SoapySDR::KwargsList list;
         static bool is_scanning = false;
         std::vector<std::string> modulations = { "BPSK", "QPSK", "QAM16", "QAM16 RRC", "OFDM" };
-        std::vector<std::string> ofdm_modulations = { "BPSK", "QPSK", "QAM16", "QAM128" };
+        std::vector<std::string> ofdm_modulations = { "BPSK", "QPSK", "QAM16", "QAM64" };
         static std::string preview_mod = modulations[context.modulation_type];
         static std::string preview_ofdm_mod = "";
         if (data.mod.ModulationType) preview_ofdm_mod = ofdm_modulations[data.ofdm_cfg.mod];
@@ -208,6 +208,7 @@ namespace gui
             ImGui::Text("SDR Cycle: %.f", data.gui.timed);
             ImGui::Text("FPS: %.1f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
             ImGui::Text("Index %d", data.dsp.max_index);
+            ImGui::Text("Offset %.1f", data.dsp.cfo);
             ImGui::Checkbox("Debug", &data.gui.debug);
             ImGui::TreePop();
             ImGui::Spacing();

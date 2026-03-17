@@ -631,14 +631,7 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
             {
                 data.dsp.max_index = ofdm_zc_corr(for_ofdm, zadoff_chu, data.gui.plato);
                 if (data.ofdm_cfg.cfo)
-                {
-                    cfo = estimate_cfo(for_ofdm, data.ofdm_cfg.n_subcarriers, data.dsp.max_index, context.sample_rate);
-                    for (size_t n = 0; n < for_ofdm.size(); ++n)
-                    {
-                        std::complex<float> phase = std::exp(std::complex<float>(0, -2.0f * M_PI * cfo * n * (1.0f / context.sample_rate)));
-                        for_ofdm[n] *= phase;
-                    }
-                }
+                    for_ofdm = cfo_est(for_ofdm, data, context);
             }
             if (data.ofdm_cfg.symbol_sync)
                 ofdm_cp_sync(for_ofdm, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.n_cp, data.gui.plato);
@@ -668,14 +661,10 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
                 next += data.ofdm_cfg.n_subcarriers;
                 last = next;
             }
-            data.mod.ofdm.erase(data.mod.ofdm.begin() + last, data.mod.ofdm.end());
+            // data.mod.ofdm.erase(data.mod.ofdm.begin() + last, data.mod.ofdm.end());
             if (data.ofdm_cfg.eq)
-            {
-                ofdm_equalize(data.mod.ofdm, for_ofdm, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.pilot_spacing);
-                data.gui_buff.write(for_ofdm);
-            }
-            else
-                data.gui_buff.write(data.mod.ofdm);
+                ofdm_equalize(data.mod.ofdm, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.pilot_spacing);
+            data.gui_buff.write(data.mod.ofdm);
 
         }
         std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -712,6 +701,7 @@ int main(int argc, char *argv[])
 {
     fftwf_init_threads();
     fftwf_plan_with_nthreads(std::thread::hardware_concurrency());
+    fftwf_make_planner_thread_safe();
     (void)argc;
     (void)argv;
     sdr_config_t sdr(

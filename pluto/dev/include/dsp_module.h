@@ -75,7 +75,7 @@ typedef struct SharedData
 
         bool changed = false;
 
-        float threshold = 0.6f;
+        float threshold = 0.3f;
         float timed = 1.0f;
         int countdown = 0;
 
@@ -167,5 +167,6 @@ float estimate_cfo(const std::vector<std::complex<float>> &rx, int N, int max_in
 float schmidl_cox_detect(const std::vector<std::complex<float>> &rx, int N, float &cfo_est, int &max_index, std::vector<float> &plato);
 int ofdm_zc_corr(const std::vector<std::complex<float>> &r, const std::vector<std::complex<float>> &zc, std::vector<float> &plato);
 int ofdm_cp_sync(const std::vector<std::complex<float>> &r, int N, int Lcp, std::vector<float> &plato);
-void ofdm_equalize(std::vector<std::complex<float>> input, std::vector<std::complex<float>> &output, int N, int ps);
+void ofdm_equalize(std::vector<std::complex<float>> &input, int N, int ps);
+std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> &signal, SharedData &sd, sdr_config_s &context);
 std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(SharedData_t &data);
