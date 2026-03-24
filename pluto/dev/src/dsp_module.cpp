@@ -266,8 +266,10 @@ void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vecto
 };
 
 
-void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t::OFDMConfig ofdm_config)
+void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t &cfg)
 {
+    auto ofdm_config = cfg.ofdm_cfg;
+    cfg.gui.estimation.clear();
     int N = ofdm_config.n_subcarriers;
     const std::complex<float> known_pilot = { 1.0f, 0.0f };
     std::vector<std::complex<float>> temp = input;
@@ -328,6 +330,9 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t::OFDMCo
 
         for (int k = pilots.back() + 1; k < N; ++k)
             if (!is_guard[k]) H[k] = H[pilots.back()];
+
+        for (auto &x : H)
+            cfg.gui.estimation.push_back(x);
 
         for (int k = 1; k < N; ++k)
             if (std::abs(H[k]) > 1e-12f)

@@ -221,6 +221,16 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
 
             if (data.gui.debug)
             {
+                ImGui::Begin("Channel Est");
+                if (ImPlot::BeginPlot("Est", ImGui::GetContentRegionAvail()))
+                {
+                    ImPlot::PlotLine("I", reinterpret_cast<const float *>(data.gui.estimation.data()),
+                        data.gui.estimation.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
+                    ImPlot::PlotLine("Q", reinterpret_cast<const float *>(data.gui.estimation.data()) + 1,
+                        data.gui.estimation.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
+                    ImPlot::EndPlot();
+                }
+                ImGui::End();
                 ImGui::Begin("SDR Time");
                 if (ImPlot::BeginPlot("Time", ImGui::GetContentRegionAvail()))
                 {
@@ -603,9 +613,7 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
         else
             continue;
 
-        std::atomic_signal_fence(std::memory_order_seq_cst);
-        start = std::chrono::steady_clock::now();
-        std::atomic_signal_fence(std::memory_order_seq_cst);
+
         if (data.mod.ModulationType == 0 or // BPSK
             data.mod.ModulationType == 1 or // QPSK
             data.mod.ModulationType == 2) // QAM16
@@ -632,7 +640,13 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
                 switch (data.dsp.sync)
                 {
                 case 0:
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    start = std::chrono::steady_clock::now();
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
                     data.dsp.max_index = ofdm_zc_corr(for_ofdm, zadoff_chu, data.gui.plato);
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
+                    end = std::chrono::steady_clock::now();
+                    std::atomic_signal_fence(std::memory_order_seq_cst);
                     break;
                 case 1:
                     data.dsp.max_index = ofdm_cp_sync(for_ofdm, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.n_cp, data.gui.plato);
@@ -674,13 +688,12 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
             }
             // data.mod.ofdm.erase(data.mod.ofdm.begin() + last, data.mod.ofdm.end());
             if (data.ofdm_cfg.eq)
-                ofdm_equalize(data.mod.ofdm, data.ofdm_cfg);
+                ofdm_equalize(data.mod.ofdm, data);
             data.gui_buff.write(data.mod.ofdm);
 
         }
-        std::atomic_signal_fence(std::memory_order_seq_cst);
-        end = std::chrono::steady_clock::now();
-        std::atomic_signal_fence(std::memory_order_seq_cst);
+
+
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
         data.history.sdrtime.push_back(data.gui.timed / 1e3);
         if (data.history.sdrtime.size() > 4000)

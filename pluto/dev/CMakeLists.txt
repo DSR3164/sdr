@@ -34,6 +34,7 @@ add_library(imgui STATIC
 target_include_directories(imgui PUBLIC
   ${THIRD_PARTY_DIR}/imgui
   ${THIRD_PARTY_DIR}/imgui/backends
+  ${SDL2_INCLUDE_DIRS}
 )
 target_link_libraries(imgui PUBLIC ${SDL2_LIBRARIES} ${OPENGL_LIBRARIES})
 target_compile_options(imgui PRIVATE -fPIC)
@@ -43,7 +44,11 @@ add_library(implot STATIC
   ${THIRD_PARTY_DIR}/implot/implot_demo.cpp
   ${THIRD_PARTY_DIR}/implot/implot_items.cpp
 )
-target_include_directories(implot PUBLIC ${THIRD_PARTY_DIR}/implot)
+target_include_directories(implot PUBLIC
+  ${THIRD_PARTY_DIR}/implot
+  ${SDL2_INCLUDE_DIRS}
+)
+
 target_link_libraries(implot PUBLIC imgui)
 target_compile_options(implot PRIVATE -fPIC)
 
