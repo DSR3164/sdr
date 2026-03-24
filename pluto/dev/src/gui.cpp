@@ -497,7 +497,7 @@ int run_sdr(sdr_config_t &context, SharedData_t &data)
     std::vector<int> bits(N, 0);
     std::vector<int16_t> tx_buffer;
     gen_bits(N, bits);
-    gui::change_modulation(context, tx_buffer, bits, data, data.ofdm_cfg.mod);
+    gui::change_modulation(context, tx_buffer, bits, data);
 
     void *tx_buffs[] = { tx_buffer.data() };
     int flags = SOAPY_SDR_HAS_TIME;
@@ -522,7 +522,7 @@ int run_sdr(sdr_config_t &context, SharedData_t &data)
         if (has_flag(context.flags, Flags::REMODULATION))
         {
             auto start = std::chrono::steady_clock::now();
-            gui::change_modulation(context, tx_buffer, bits, data, data.ofdm_cfg.mod);
+            gui::change_modulation(context, tx_buffer, bits, data);
             k = 0;
             buff_count = tx_buffer.size() / (context.buffer_size * 2.0);
             auto end = std::chrono::steady_clock::now();
@@ -629,7 +629,18 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
             for_ofdm = raw;
             if (data.ofdm_cfg.pss)
             {
-                data.dsp.max_index = ofdm_zc_corr(for_ofdm, zadoff_chu, data.gui.plato);
+                switch (data.dsp.sync)
+                {
+                case 0:
+                    data.dsp.max_index = ofdm_zc_corr(for_ofdm, zadoff_chu, data.gui.plato);
+                    break;
+                case 1:
+                    data.dsp.max_index = ofdm_cp_sync(for_ofdm, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.n_cp, data.gui.plato);
+                    break;
+                case 2:
+                    schmidl_cox_detect(for_ofdm, data.ofdm_cfg.n_subcarriers, data.dsp.cfo, data.dsp.max_index, data.gui.plato);
+                    break;
+                }
                 if (data.ofdm_cfg.cfo)
                     for_ofdm = cfo_est(for_ofdm, data, context);
             }
@@ -663,7 +674,7 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
             }
             // data.mod.ofdm.erase(data.mod.ofdm.begin() + last, data.mod.ofdm.end());
             if (data.ofdm_cfg.eq)
-                ofdm_equalize(data.mod.ofdm, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.pilot_spacing);
+                ofdm_equalize(data.mod.ofdm, data.ofdm_cfg);
             data.gui_buff.write(data.mod.ofdm);
 
         }
@@ -707,13 +718,14 @@ int main(int argc, char *argv[])
     sdr_config_t sdr(
         "", 1920,
         1.92e6,
-        300e6, 300e6,
+        2e9, 2e9,
         89.0, 25.0,
         true, true);
     sdr.modulation_type = 4;
     sdr.flags |= Flags::APPLY_BANDWIDTH;
     int subcarrier_count = static_cast<int>(sdr.sample_rate / 15e3);
-    SharedData_t data(sdr.buffer_size, subcarrier_count, 32, 56, 4);
+    SharedData_t data(sdr.buffer_size, subcarrier_count, 32, 6, 4);
+    data.ofdm_cfg.cfo = true;
 
     std::thread gui_thread(run_gui, std::ref(sdr), std::ref(data));
     std::thread sdr_thread(run_sdr, std::ref(sdr), std::ref(data));

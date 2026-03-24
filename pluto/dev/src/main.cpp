@@ -6,13 +6,14 @@ using namespace std;
 
 int main()
 {
+    SharedData_t data(1920, 128, 32, 6, 3);
     int subcarriers = 128;
     int N = subcarriers * 13 * 2;
     vector<int> bits(N);
     vector<int16_t> tx_buffer;
 
     gen_bits(N, bits);
-    ofdm(bits, tx_buffer, subcarriers, subcarriers / 16, subcarriers - 3);
+    ofdm(bits, tx_buffer, data.ofdm_cfg);
 
     std::fstream file("../pcm/ofdm2.pcm", std::ios::out | std::ios::binary);
 

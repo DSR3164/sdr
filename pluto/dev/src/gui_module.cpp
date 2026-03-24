@@ -14,7 +14,7 @@
 
 namespace gui
 {
-    void change_modulation(sdr_config_t &sdr_config, std::vector<int16_t> &tx_buffer, std::vector<int> &bits, SharedData_t &data, int ofdm_mod)
+    void change_modulation(sdr_config_t &sdr_config, std::vector<int16_t> &tx_buffer, std::vector<int> &bits, SharedData_t &data)
     {
         tx_buffer.clear();
         tx_buffer.reserve(1920 * 4);
@@ -34,7 +34,7 @@ namespace gui
             qam16_3gpp_rrc(bits, tx_buffer);
             break;
         case 4:
-            ofdm(bits, tx_buffer, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.n_cp, data.ofdm_cfg.pilot_spacing, ofdm_mod);
+            ofdm(bits, tx_buffer, data.ofdm_cfg);
             break;
         default:
             break;
@@ -188,6 +188,7 @@ namespace gui
         static SoapySDR::KwargsList list;
         static bool is_scanning = false;
         std::vector<std::string> modulations = { "BPSK", "QPSK", "QAM16", "QAM16 RRC", "OFDM" };
+        std::vector<std::string> syncs = { "ZC", "CP", "SC" };
         std::vector<std::string> ofdm_modulations = { "BPSK", "QPSK", "QAM16", "QAM64" };
         static std::string preview_mod = modulations[context.modulation_type];
         static std::string preview_ofdm_mod = "";
@@ -348,6 +349,18 @@ namespace gui
                             preview_ofdm_mod = ofdm_modulations[i];
                             context.flags |= Flags::REMODULATION;
                         }
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                if (ImGui::BeginCombo("SYN", syncs[data.dsp.sync].c_str(), ImGuiComboFlags_WidthFitPreview))
+                {
+                    for (size_t i = 0; i < syncs.size(); ++i)
+                    {
+                        bool is_selected = (i == static_cast<size_t>(data.dsp.sync));
+                        if (ImGui::Selectable(syncs[i].c_str(), is_selected))
+                            data.dsp.sync = i;
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
                     }

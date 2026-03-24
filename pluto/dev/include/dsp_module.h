@@ -1,10 +1,11 @@
 #pragma once
 
-#include <pluto_lib.h>
 #include <vector>
 #include <complex>
 #include <cmath>
 #include <atomic>
+
+typedef struct sdr_config_s sdr_config_t;
 
 template <typename T>
 class DoubleBuffer {
@@ -82,6 +83,7 @@ typedef struct SharedData
         float cfo = 0.0f;
         int max_index = 0;
         int offset = 0;
+        int sync = 0;
     } dsp;
 
     struct OFDMConfig
@@ -96,6 +98,7 @@ typedef struct SharedData
         int pilot_spacing;
         int n_cp;
         bool cfo;
+        int *preamble;
     } ofdm_cfg;
 
     struct GUI
@@ -156,6 +159,8 @@ typedef struct SharedData
         history.sdrtime.resize(1920);
         history.send.resize(1920);
         history.receive.resize(1920);
+
+        ofdm_cfg.preamble = &dsp.sync;
     }
 
 } SharedData_t;
@@ -167,6 +172,8 @@ float estimate_cfo(const std::vector<std::complex<float>> &rx, int N, int max_in
 float schmidl_cox_detect(const std::vector<std::complex<float>> &rx, int N, float &cfo_est, int &max_index, std::vector<float> &plato);
 int ofdm_zc_corr(const std::vector<std::complex<float>> &r, const std::vector<std::complex<float>> &zc, std::vector<float> &plato);
 int ofdm_cp_sync(const std::vector<std::complex<float>> &r, int N, int Lcp, std::vector<float> &plato);
-void ofdm_equalize(std::vector<std::complex<float>> &input, int N, int ps);
+void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t::OFDMConfig ofdm_config);
 std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> &signal, SharedData &sd, sdr_config_s &context);
 std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(SharedData_t &data);
+void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vector<int> &pilots, std::vector<bool> &is_pilot, std::vector<bool> &is_guard);
+void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vector<int> &pilots, std::vector<int> &data, std::vector<bool> &is_pilot, std::vector<bool> &is_guard);

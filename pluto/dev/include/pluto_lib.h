@@ -1,4 +1,7 @@
 #pragma once
+
+#include "dsp_module.h"
+
 #include <SoapySDR/Device.hpp>
 #include <complex>
 #include <cstddef>
@@ -398,11 +401,9 @@ void qam16_3gpp_rrc(const std::vector<int> &bits, std::vector<int16_t> &buffer, 
  *
  * \param bits Input vector of bits.
  * \param buffer Output buffer of int16_t OFDM samples.
- * \param N Number of subcarriers.
- * \param Ncp Length of cyclic prefix.
- * \param pilot_spacing Spacing between pilot subcarriers, default is 4.
+ * \param ofdm_config OFDM configuration structure.
 */
-void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int Ncp, int pilot_spacing = 4, int modulation_type = 2);
+void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, SharedData_t::OFDMConfig ofdm_config);
 
 /*!
  * \brief Insert a Barker sequence into the symbol buffer for synchronization.

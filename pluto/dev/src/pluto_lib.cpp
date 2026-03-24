@@ -1,5 +1,6 @@
 #include "pluto_lib.h"
-#include "fftw3.h"
+
+#include <fftw3.h>
 #include <SoapySDR/Constants.h>
 #include <SoapySDR/Formats.hpp>
 #include <SoapySDR/Device.hpp>
@@ -224,8 +225,13 @@ std::vector<std::complex<float>> generate_zc(int L, int q)
     return zc;
 }
 
-void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int Ncp, int pilot_spacing, int modulation_type)
+void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, SharedData_t::OFDMConfig ofdm_config)
 {
+    int Ncp = ofdm_config.n_cp;
+    int N = ofdm_config.n_subcarriers;
+    int pilot_spacing = ofdm_config.pilot_spacing;
+    int modulation_type = ofdm_config.mod;
+
     if (N < 4 or pilot_spacing < 2)
         return;
 
@@ -259,27 +265,13 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int
     FFTWPlan ifft(N, false);
 
     int total_qpsk = (int)symbols.size();
-    std::vector<int> data_positions;
-    std::vector<int> pilot_positions;
+    std::vector<int> data;
+    std::vector<int> pilots;
+    std::vector<bool> is_guard;
+    std::vector<bool> is_pilot;
+    calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
 
-    int counter = 0;
-
-    for (int k = 1; k < N; ++k)
-    {
-        if (k > N / 2 - 28 and k < N / 2 + 27)
-            continue;
-
-        if (counter % pilot_spacing == 0)
-        {
-            pilot_positions.push_back(k);
-        }
-        else
-            data_positions.push_back(k);
-
-        counter++;
-    }
-
-    int symbols_per_ofdm = static_cast<int>(data_positions.size());
+    int symbols_per_ofdm = static_cast<int>(data.size());
     int num_ofdm_symbols = total_qpsk / symbols_per_ofdm;
 
     buffer.reserve((num_ofdm_symbols + Ncp) * (N + 2));
@@ -287,16 +279,27 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int
     ifft.in[0][0] = 0;
     ifft.in[0][1] = 0;
 
-    for (size_t i = 1; i <= 63; ++i)
+    if (*ofdm_config.preamble == 0)
     {
-        ifft.in[i][0] = zc[i - 1].real();
-        ifft.in[i][1] = zc[i - 1].imag();
-    }
+        for (size_t i = 1; i <= 63; ++i)
+        {
+            ifft.in[i][0] = zc[i - 1].real();
+            ifft.in[i][1] = zc[i - 1].imag();
+        }
 
-    for (size_t i = 64; i <= 127; ++i)
+        for (size_t i = 64; i <= 127; ++i)
+        {
+            ifft.in[i][0] = zc[i - 1].real();
+            ifft.in[i][1] = zc[i - 1].imag();
+        }
+    }
+    else
     {
-        ifft.in[i][0] = zc[i - 1].real();
-        ifft.in[i][1] = zc[i - 1].imag();
+        for (size_t i = 1; i < N; i += 2)
+        {
+            ifft.in[i][0] = 1.0f;
+            ifft.in[i][1] = 0.0f;
+        }
     }
 
     fftwf_execute(ifft.plan);
@@ -330,16 +333,16 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, int N, int
             ifft.in[i][1] = 0.0f;
         }
 
-        for (int k : pilot_positions)
+        for (int k : pilots)
         {
             ifft.in[k][0] = 1.0f;
             ifft.in[k][1] = 0.0f;
         }
 
-        for (int i = 0; i < data_positions.size(); ++i)
+        for (int i = 0; i < data.size(); ++i)
         {
             int idx = sym * symbols_per_ofdm + i;
-            int k = data_positions[i];
+            int k = data[i];
 
             ifft.in[k][0] = (float)std::real(symbols[idx]);
             ifft.in[k][1] = (float)std::imag(symbols[idx]);
@@ -425,15 +428,20 @@ int init(sdr_config_t *config)
     sdr->setSampleRate(SOAPY_SDR_RX, 0, config->sample_rate);
     sdr->setFrequency(SOAPY_SDR_RX, 0, config->rx_carrier_freq);
     sdr->setGain(SOAPY_SDR_RX, 0, config->rx_gain);
-    sdr->setGainMode(SOAPY_SDR_RX, 0, false);
-    sdr->setBandwidth(SOAPY_SDR_RX, 0, config->rx_bandwidth);
+    // sdr->setGainMode(SOAPY_SDR_RX, 0, false);
+    // sdr->setBandwidth(SOAPY_SDR_RX, 0, config->rx_bandwidth);
 
     // TX parameters
     sdr->setSampleRate(SOAPY_SDR_TX, 0, config->sample_rate);
     sdr->setFrequency(SOAPY_SDR_TX, 0, config->tx_carrier_freq);
     sdr->setGain(SOAPY_SDR_TX, 0, config->tx_gain);
-    sdr->setGainMode(SOAPY_SDR_TX, 0, false);
-    sdr->setBandwidth(SOAPY_SDR_TX, 0, config->tx_bandwidth);
+    // sdr->setGainMode(SOAPY_SDR_TX, 0, false);
+    // sdr->setBandwidth(SOAPY_SDR_TX, 0, config->tx_bandwidth);
+
+    // sdr->setDCOffsetMode(SOAPY_SDR_RX, 0, true);
+    // sdr->setDCOffsetMode(SOAPY_SDR_TX, 0, true);
+    // sdr->setIQBalanceMode(SOAPY_SDR_RX, 0, true);
+    // sdr->setIQBalanceMode(SOAPY_SDR_TX, 0, true);
 
     // Stream parameters
     std::vector<size_t> channels = { 0 };

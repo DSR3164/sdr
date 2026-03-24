@@ -14,7 +14,7 @@ namespace gui
     int context_edit_window(sdr_config_t &context, SharedData_t &data);
     void compute_fftw(const std::vector<std::complex<float>> &iq, std::vector<float> &out_db);
     void compute_hz(sdr_config_t &context, std::vector<float> &x_hz);
-    void change_modulation(sdr_config_t &sdr_config, std::vector<int16_t> &tx_buffer, std::vector<int> &bits, SharedData_t &data, int ofdm_mod);
+    void change_modulation(sdr_config_t &sdr_config, std::vector<int16_t> &tx_buffer, std::vector<int> &bits, SharedData_t &data);
     void compute_wf_row_u8(const int16_t *iq_interleaved, uint8_t *outRow);
     static inline void db_to_u8(float db, uint8_t &r, uint8_t &g, uint8_t &b, float db_min = -120.0f, float db_max = -20.0f)
     {

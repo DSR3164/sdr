@@ -1,5 +1,5 @@
-#include <dsp_module.h>
-#include <pluto_lib.h>
+#include "dsp_module.h"
+#include "pluto_lib.h"
 
 #include <vector>
 #include <complex>
@@ -179,7 +179,6 @@ int ofdm_cp_sync(const std::vector<std::complex<float>> &r, int N, int Lcp, std:
 
     std::complex<float> P = 0.0f;
     float R = 0.0f;
-    int timeout = 3;
 
     for (int i = 0; i < Lcp; i++)
     {
@@ -192,20 +191,10 @@ int ofdm_cp_sync(const std::vector<std::complex<float>> &r, int N, int Lcp, std:
 
         float metric = std::norm(P) / (R * R + 1e-12f);
 
-        if (metric > max_metric
-            and metric > 0.75
-            and d > 150)
+        if (metric > max_metric)
         {
             max_metric = metric;
             max_index = d;
-        }
-        else if (max_metric > metric and metric > 0.75
-            and d > 150)
-        {
-            if (timeout)
-                timeout -= 1;
-            else
-                return max_metric;
         }
 
         if (d + 1 >= size - N - Lcp)
@@ -222,37 +211,80 @@ int ofdm_cp_sync(const std::vector<std::complex<float>> &r, int N, int Lcp, std:
     return max_index;
 }
 
-void ofdm_equalize(std::vector<std::complex<float>> &input, int N, int ps)
+void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vector<int> &pilots, std::vector<int> &data, std::vector<bool> &is_pilot, std::vector<bool> &is_guard)
 {
-    const int DC = N / 2;
-    const std::complex<float> known_pilot = { 2.0f, 0.0f };
+    size_t N = static_cast<size_t>(ofdm_config.n_subcarriers);
+    int PS = ofdm_config.pilot_spacing;
 
-    std::vector<int> pilots;
-    std::vector<bool> is_pilot(N, false);
+    pilots.clear();
+    is_pilot.resize(N, false);
+    is_guard.resize(N, false);
 
     int counter = 0;
-    for (int k = 1; k < N; ++k)
+    for (size_t k = 0; k < N; ++k)
     {
-        if (k > N / 2 - 28 and k < N / 2 + 27)
+        if ((k > N / 2 - 28 and k < N / 2 + 27) or k == 0)
         {
-            is_pilot[k] = true;
+            is_guard[k] = true;
             continue;
         }
-        if (counter % ps == 0)
+        if (counter % PS == 0)
+        {
+            pilots.push_back(k);
+            is_pilot[k] = true;
+        }
+        else
+            data.push_back(k);
+        counter++;
+    }
+};
+
+void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vector<int> &pilots, std::vector<bool> &is_pilot, std::vector<bool> &is_guard)
+{
+    size_t N = static_cast<size_t>(ofdm_config.n_subcarriers);
+    int PS = ofdm_config.pilot_spacing;
+
+    pilots.clear();
+    is_pilot.resize(N, false);
+    is_guard.resize(N, false);
+
+    int counter = 0;
+    for (size_t k = 0; k < N; ++k)
+    {
+        if ((k > N / 2 - 28 and k < N / 2 + 27) or k == 0)
+        {
+            is_guard[k] = true;
+            continue;
+        }
+        if (counter % PS == 0)
         {
             pilots.push_back(k);
             is_pilot[k] = true;
         }
         counter++;
     }
-    is_pilot[DC] = true;
+};
+
+
+void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t::OFDMConfig ofdm_config)
+{
+    int N = ofdm_config.n_subcarriers;
+    const std::complex<float> known_pilot = { 1.0f, 0.0f };
+    std::vector<std::complex<float>> temp = input;
+    input.clear();
+
+    std::vector<int> pilots;
+    std::vector<bool> is_pilot(N, false);
+    std::vector<bool> is_guard(N, false);
+
+    calculate_pilots_and_guard(ofdm_config, pilots, is_pilot, is_guard);
 
     std::vector<std::complex<float>> H_prev(N, { 1,0 });
 
-    for (size_t i = 0; i + N <= input.size(); i += N)
+    for (size_t i = 0; i + N <= temp.size(); i += N)
     {
-        std::vector<std::complex<float>> sym(input.begin() + i,
-            input.begin() + i + N);
+        std::vector<std::complex<float>> sym(temp.begin() + i,
+            temp.begin() + i + N);
 
         std::vector<std::complex<float>> H(N, { 0,0 });
         std::vector<std::complex<float>> equalized(N);
@@ -272,15 +304,15 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, int N, int ps)
             float a2 = std::arg(H2);
 
             float da = a2 - a1;
-            if (da > M_PI) da -= 2 * M_PI;
-            if (da < -M_PI) da += 2 * M_PI;
+            if (da > M_PIf) da -= 2 * M_PIf;
+            if (da < -M_PIf) da += 2 * M_PIf;
 
             float m1 = std::abs(H1);
             float m2 = std::abs(H2);
 
             for (int k = k1 + 1; k < k2; ++k)
             {
-                if (k == DC) continue;
+                if (is_guard[k]) continue;
 
                 float alpha = float(k - k1) / float(k2 - k1);
 
@@ -292,10 +324,10 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, int N, int ps)
         }
 
         for (int k = 0; k < pilots.front(); ++k)
-            if (k != DC) H[k] = H[pilots.front()];
+            if (!is_guard[k]) H[k] = H[pilots.front()];
 
         for (int k = pilots.back() + 1; k < N; ++k)
-            if (k != DC) H[k] = H[pilots.back()];
+            if (!is_guard[k]) H[k] = H[pilots.back()];
 
         for (int k = 1; k < N; ++k)
             if (std::abs(H[k]) > 1e-12f)
@@ -312,14 +344,12 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, int N, int ps)
         std::complex<float> rot = std::exp(std::complex<float>(0, -phase));
 
         for (int k = 0; k < N; ++k)
-            if (k != DC)
+            if (!is_guard[k])
                 equalized[k] *= rot;
 
-        for (int k = 1; k < N; ++k)
-            if (!is_pilot[k])
-                input[k + i] = (equalized[k]);
-            else
-                input[k + i] = { 0.0f, 0.0f };
+        for (int k = 0; k < N; ++k)
+            if (!is_pilot[k] and !is_guard[k])
+                input.push_back(equalized[k]);
     }
 
 }
@@ -338,41 +368,42 @@ float estimate_cfo(const std::vector<std::complex<float>> &rx, int N, int max_in
     return cfo;
 }
 
-float schmidl_cox_detect(const std::vector<std::complex<float>> &rx, int N, float &cfo_est, int &max_index, std::vector<float> &plato)
-{
-    plato.resize(0);
-    plato.reserve(1920);
-
+float schmidl_cox_detect(const std::vector<std::complex<float>> &rx, int N, float &cfo_est, int &max_index, std::vector<float> &plato) {
     size_t L = N / 2;
-    int size = rx.size();
-
-    if (size < N + 1)
-        return -1;
+    size_t rx_size = rx.size();
+    if (rx_size < N) return 0.0f;
 
     std::complex<float> P = 0.0f;
     float R = 0.0f;
-    float metric = 0.0f;
     float max_metric = 0.0f;
-    size_t rx_size = rx.size();
-    if (rx_size < N)
-        return 0.0f;
-    for (size_t i = 0; i + N <= rx_size; ++i)
-    {
-        metric = 0.0f;
-        for (size_t n = 0; n < L; ++n)
-        {
-            P += rx[n + i] * std::conj(rx[n + L + i]);
-            R += std::norm(rx[n + L + i]);
-        }
-        metric = std::norm(P) / std::norm(R);
-        plato.push_back(metric);
-        if (metric > max_metric)
-        {
-            max_index = i;
-            max_metric = metric;
-        }
+
+    // 1. Инициализация первого окна (i = 0)
+    for (size_t n = 0; n < L; ++n) {
+        P += rx[n] * std::conj(rx[n + L]);
+        R += std::norm(rx[n + L]);
     }
 
+    // 2. Скользящее окно
+    for (size_t i = 0; i <= rx_size - N; ++i) {
+        // Вычисляем метрику: |P|^2 / R^2
+        float metric = (R > 0) ? (std::norm(P) / (R * R)) : 0.0f;
+        plato[i] = metric;
+
+        if (metric > max_metric) {
+            max_metric = metric;
+            max_index = i;
+            // CFO можно посчитать тут: cfo_est = std::arg(P) / M_PI;
+        }
+
+        // Сдвигаем окно (убираем rx[i], добавляем rx[i+1])
+        if (i + N < rx_size) {
+            std::complex<float> out_term = rx[i] * std::conj(rx[i + L]);
+            std::complex<float> in_term = rx[i + L] * std::conj(rx[i + N]);
+            
+            P = P - out_term + in_term;
+            R = R - std::norm(rx[i + L]) + std::norm(rx[i + N]);
+        }
+    }
     return max_metric;
 }
 
@@ -415,30 +446,31 @@ std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> 
 {
     int N = data.ofdm_cfg.n_subcarriers;
     int CP = data.ofdm_cfg.n_cp;
-    float fs = context.sample_rate;
+    float fs = static_cast<float>(context.sample_rate);
     int start = data.dsp.max_index + N;
-    std::complex<float> corr = 0;
-
-
-
-    for (int n = start; n < start + CP; n++)
-    {
-        if (signal.size() < start + 2 * N + CP)
-            break;
-        corr += std::conj(signal[n]) * signal[n + N];
-    }
-
-    float epsilon = std::arg(corr) / (2 * M_PI);
-
-    float delta_f = epsilon * fs / N;
-
-    data.dsp.cfo = delta_f;
-
     std::vector<std::complex<float>> corrected = signal;
-    for (size_t n = start; n < signal.size(); n++)
+
+    int symbol_len = N + CP;
+    for (size_t i = 0; i < 10; ++i)
     {
-        float phase = -2 * M_PIf * delta_f * n / fs;
-        corrected[n] *= std::complex<float>(std::cos(phase), std::sin(phase));
+        int sym_start = start + i * symbol_len;
+        if (signal.size() < sym_start + N + CP)
+            break;
+
+        std::complex<float> corr = 0;
+        for (int n = 0; n < CP; ++n)
+            corr += std::conj(signal[sym_start + n]) * signal[sym_start + n + N];
+
+        float epsilon = std::arg(corr) / (2 * M_PIf);
+        float delta_f = epsilon * fs / N;
+
+        data.dsp.cfo = delta_f;
+
+        for (int n = 0; n < N + CP; ++n)
+        {
+            float phase = -2 * M_PIf * delta_f * (sym_start + n) / fs;
+            corrected[sym_start + n] *= std::complex<float>(std::cos(phase), std::sin(phase));
+        }
     }
 
     return corrected;
