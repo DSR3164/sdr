@@ -39,8 +39,8 @@ void qam64_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<do
 {
     for (size_t i = 0; i < symbols.size(); ++i)
         symbols[i] = std::complex<double>(
-            (1 - 2 * bits[7 * i + 0]) * (4 - (1 - 2 * bits[7 * i + 2]) * (2 - (1 - 2 * bits[7 * i + 4]))),
-            (1 - 2 * bits[7 * i + 1]) * (4 - (1 - 2 * bits[7 * i + 3]) * (2 - (1 - 2 * bits[7 * i + 5]))))
+            (1 - 2 * bits[6 * i + 0]) * (4 - (1 - 2 * bits[6 * i + 2]) * (2 - (1 - 2 * bits[6 * i + 4]))),
+            (1 - 2 * bits[6 * i + 1]) * (4 - (1 - 2 * bits[6 * i + 3]) * (2 - (1 - 2 * bits[6 * i + 5]))))
         / sqrt(42.0);
 }
 
@@ -253,7 +253,7 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, SharedData
         qam16_mapper_3gpp(bits, symbols);
         break;
     case 3:
-        symbols.resize(bits.size() / 7);
+        symbols.resize(bits.size() / 6);
         qam64_mapper_3gpp(bits, symbols);
         break;
     default:
