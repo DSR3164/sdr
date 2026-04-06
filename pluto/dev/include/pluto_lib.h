@@ -119,7 +119,7 @@ typedef struct sdr_config_s
     {
         rxbuffer.resize(buffer_size * 2);
         auto list = SoapySDR::Device::enumerate();
-        if (!list.empty())
+        if (!list.empty() and (list[0]["uri"] != "ip:pluto.local"))
         {
             args = list[0];
             for (auto &x : args)
