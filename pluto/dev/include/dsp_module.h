@@ -152,7 +152,6 @@ typedef struct SharedData
         ofdm_cfg.n_subcarriers = n;
         ofdm_cfg.pilot_spacing = ps;
         ofdm_cfg.n_cp = ncp;
-        ofdm_cfg.cfo = 0;
         gui.plato.resize(1920);
         gui.metrics.resize(1920);
         history.dsptime.resize(1920);
