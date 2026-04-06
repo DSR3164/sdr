@@ -218,13 +218,20 @@ namespace gui
 
         if (ImGui::TreeNode("SDR"))
         {
-            bool changed_tx_g = ImGui::SliderFloat("TX Gain", &context.tx_gain, 0.0f, 89.0f, "%.3f");
-            bool changed_rx_g = ImGui::SliderFloat("RX Gain", &context.rx_gain, 0.0f, 73.0f, "%.3f");
+            bool changed_rx_g = ImGui::SliderFloat("RX Gain", &context.rx_gain, 0.0f, 73.0f, "%.1f");
+            bool changed_tx_g = ImGui::SliderFloat("TX Gain", &context.tx_gain, 0.0f, 89.0f, "%.1f");
+
+            bool cragc = ImGui::Checkbox("RX AGC", &context.rx_agc);
+            ImGui::SameLine();
+            bool ctagc = ImGui::Checkbox("TX AGC", &context.tx_agc);
+
+            if (context.rx_agc)
+                context.rx_gain = context.sdr->getGain(SOAPY_SDR_RX, 0);
+            if (context.tx_agc)
+                context.tx_gain = context.sdr->getGain(SOAPY_SDR_TX, 0);
+
             bool changed_tx_f = ImGui::InputDouble("TX Frequency", &context.tx_carrier_freq, 10e3, 10e5, "%e");
             bool changed_rx_f = ImGui::InputDouble("RX Frequency", &context.rx_carrier_freq, 10e3, 10e5, "%e");
-            ImGui::SliderFloat("Coefficient", &data.dsp.scale_coef, 0.0f, 2000.0f, "%.3f");
-            ImGui::InputDouble("Gardner", &data.dsp.gardner_band, 1e-6, 1, "%e");
-            ImGui::InputDouble("Costas", &data.dsp.costas_band, 1e-6, 1, "%e");
             if (ImGui::SliderInt("TX Bandwidth", &current_tx_borhwidth, 0, values.size() - 1, std::to_string(values[current_tx_borhwidth]).c_str()))
             {
                 context.tx_bandwidth = values[current_tx_borhwidth];
@@ -236,7 +243,7 @@ namespace gui
                 context.flags |= Flags::APPLY_BANDWIDTH;
             }
 
-            if (changed_tx_g || changed_rx_g)
+            if (changed_tx_g or changed_rx_g or cragc or ctagc)
                 context.flags |= Flags::APPLY_GAIN;
 
             if (changed_tx_f || changed_rx_f)
@@ -367,12 +374,9 @@ namespace gui
                     }
                     ImGui::EndCombo();
                 }
-                ImGui::Checkbox("CP sync", &data.ofdm_cfg.symbol_sync);
-                ImGui::SameLine();
                 ImGui::Checkbox("PSS", &data.ofdm_cfg.pss);
                 ImGui::SameLine();
                 ImGui::Checkbox("CFO", &data.ofdm_cfg.cfo);
-                ImGui::SameLine();
                 ImGui::Checkbox("FFT", &data.ofdm_cfg.fft);
                 ImGui::SameLine();
                 ImGui::Checkbox("Equa", &data.ofdm_cfg.eq);
@@ -383,6 +387,12 @@ namespace gui
                 if (ImGui::SliderInt("OFDM Pilot Spacing", &data.ofdm_cfg.pilot_spacing, 2, std::round(context.sample_rate / 15e3) - 3))
                     context.flags |= Flags::REMODULATION;
                 ImGui::InputInt("OFDM Symbol Offset", &data.dsp.offset, 1, -1);
+            }
+            else
+            {
+                ImGui::InputDouble("Gardner", &data.dsp.gardner_band, 1e-6, 1, "%e");
+                ImGui::InputDouble("Costas", &data.dsp.costas_band, 1e-6, 1, "%e");
+                ImGui::SliderFloat("Coefficient", &data.dsp.scale_coef, 0.0f, 2000.0f, "%.3f");
             }
 
             ImGui::TreePop();

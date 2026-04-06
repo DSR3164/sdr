@@ -86,6 +86,8 @@ typedef struct sdr_config_s
 
     float tx_gain = 70.0f;
     float rx_gain = 70.0f;
+    bool rx_agc = false;
+    bool tx_agc = false;
 
     std::vector<int16_t> rxbuffer;
     std::vector<int16_t> txbuffer;

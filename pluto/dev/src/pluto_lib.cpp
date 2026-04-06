@@ -442,14 +442,14 @@ int init(sdr_config_t *config)
     sdr->setSampleRate(SOAPY_SDR_RX, 0, config->sample_rate);
     sdr->setFrequency(SOAPY_SDR_RX, 0, config->rx_carrier_freq);
     sdr->setGain(SOAPY_SDR_RX, 0, config->rx_gain);
-    // sdr->setGainMode(SOAPY_SDR_RX, 0, false);
+    sdr->setGainMode(SOAPY_SDR_RX, 0, config->rx_agc);
     // sdr->setBandwidth(SOAPY_SDR_RX, 0, config->rx_bandwidth);
 
     // TX parameters
     sdr->setSampleRate(SOAPY_SDR_TX, 0, config->sample_rate);
     sdr->setFrequency(SOAPY_SDR_TX, 0, config->tx_carrier_freq);
     sdr->setGain(SOAPY_SDR_TX, 0, config->tx_gain);
-    // sdr->setGainMode(SOAPY_SDR_TX, 0, false);
+    sdr->setGainMode(SOAPY_SDR_TX, 0, config->tx_agc);
     // sdr->setBandwidth(SOAPY_SDR_TX, 0, config->tx_bandwidth);
 
     // sdr->setDCOffsetMode(SOAPY_SDR_RX, 0, true);
@@ -535,6 +535,8 @@ void apply_runtime(sdr_config_t &context)
     {
         context.sdr->setGain(SOAPY_SDR_TX, 0, context.tx_gain);
         context.sdr->setGain(SOAPY_SDR_RX, 0, context.rx_gain);
+        context.sdr->setGainMode(SOAPY_SDR_RX, 0, context.rx_agc);
+        context.sdr->setGainMode(SOAPY_SDR_TX, 0, context.tx_agc);
         context.flags &= ~Flags::APPLY_GAIN;
     }
 
