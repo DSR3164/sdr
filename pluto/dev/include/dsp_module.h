@@ -104,7 +104,7 @@ typedef struct SharedData
     struct GUI
     {
         std::vector<float> metrics;
-        std::vector<std::vector<float>> waterfall;
+        std::vector<std::complex<float>> estimation;
         std::vector<float> plato;
 
         bool stopped = false;
@@ -170,9 +170,9 @@ std::vector<std::complex<float>> costas_loop(const std::vector<std::complex<floa
 std::vector<std::complex<float>> convolve_ones(const std::vector<std::complex<float>> &x, int SPS);
 float estimate_cfo(const std::vector<std::complex<float>> &rx, int N, int max_index, float Fs);
 float schmidl_cox_detect(const std::vector<std::complex<float>> &rx, int N, float &cfo_est, int &max_index, std::vector<float> &plato);
-int ofdm_zc_corr(const std::vector<std::complex<float>> &r, const std::vector<std::complex<float>> &zc, std::vector<float> &plato);
+int zc_sync(const std::vector<std::complex<float>> &rx, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, std::vector<float> &plato);
 int ofdm_cp_sync(const std::vector<std::complex<float>> &r, int N, int Lcp, std::vector<float> &plato);
-void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t::OFDMConfig ofdm_config);
+void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t &ofdm_config);
 std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> &signal, SharedData &sd, sdr_config_s &context);
 std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(SharedData_t &data);
 void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vector<int> &pilots, std::vector<bool> &is_pilot, std::vector<bool> &is_guard);

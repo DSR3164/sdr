@@ -583,12 +583,17 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
     std::chrono::steady_clock::time_point start;
     std::chrono::steady_clock::time_point end;
     auto &raw = data.mod.raw;
+    float zc_energy = 0.0f;
 
     std::vector<std::complex<float>> for_ofdm;
     std::vector<int16_t> temp(context.buffer_size * 2, 0);
     for_ofdm.reserve(context.buffer_size * 2);
     std::vector<std::complex<float>> zadoff_chu = ofdm_zadoff_chu_symbol(data);
     static float cfo = 0.0f;
+    const float *zptr = reinterpret_cast<const float *>(zadoff_chu.data());
+    for (int n = 0; n < zadoff_chu.size() * 2; ++n)
+        zc_energy += zptr[n] * zptr[n];
+    
 
     while (!has_flag(context.flags, Flags::EXIT))
     {
@@ -643,7 +648,7 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
                     std::atomic_signal_fence(std::memory_order_seq_cst);
                     start = std::chrono::steady_clock::now();
                     std::atomic_signal_fence(std::memory_order_seq_cst);
-                    data.dsp.max_index = ofdm_zc_corr(for_ofdm, zadoff_chu, data.gui.plato);
+                    data.dsp.max_index = zc_sync(for_ofdm, zadoff_chu, zc_energy, data.gui.plato);
                     std::atomic_signal_fence(std::memory_order_seq_cst);
                     end = std::chrono::steady_clock::now();
                     std::atomic_signal_fence(std::memory_order_seq_cst);

@@ -115,60 +115,55 @@ std::vector<std::complex<float>> convolve_ones(const std::vector<std::complex<fl
     return y;
 }
 
-int ofdm_zc_corr(const std::vector<std::complex<float>> &r, const std::vector<std::complex<float>> &zc, std::vector<float> &plato)
+int zc_sync(const std::vector<std::complex<float>> &rx, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, std::vector<float> &plato)
 {
+    const size_t N = zadoff_chu.size();
+    const size_t L = rx.size();
 
-    const int N = zc.size();
-    const int L = r.size();
+    const float *__restrict r = reinterpret_cast<const float *>(rx.data());
+    const float *__restrict zc = reinterpret_cast<const float *>(zadoff_chu.data());
 
-    int best_pos = -1;
-    float best_val = 0;
+    float max_norm = -1.f;
+    int best_idx = -1;
 
-    const float *rptr = reinterpret_cast<const float *>(r.data());
-    const float *zptr = reinterpret_cast<const float *>(zc.data());
-
-    float zc_energy = 0;
-    for (int n = 0; n < N; n++)
-    {
-        float br = zptr[2 * n];
-        float bi = zptr[2 * n + 1];
-        zc_energy += br * br + bi * bi;
+    float current_sig_energy = 0.0f;
+    for (size_t k = 0; k < N; ++k) {
+        const float *__restrict r_offset = &r[2 * k];
+        current_sig_energy += r_offset[0]*r_offset[0] + r_offset[1]*r_offset[1];
     }
 
-    for (int k = 0; k <= L - N; k++)
+    for (size_t n = 0; n <= L - N; ++n)
     {
-        float re = 0, im = 0;
-        float energy = 0;
+        float sum_re = 0.0f, sum_im = 0.0f;
+        const float *__restrict r_offset = &r[2 * n];
 
-        const float *rp = rptr + 2 * k;
-
-        for (int n = 0; n < N; n++)
+        for (size_t k = 0; k < N; ++k)
         {
-            float ar = rp[2 * n];
-            float ai = rp[2 * n + 1];
+            float sr = r_offset[2 * k];
+            float si = r_offset[2 * k + 1];
+            float zr = zc[2 * k];
+            float zi = zc[2 * k + 1];
 
-            float br = zptr[2 * n];
-            float bi = zptr[2 * n + 1];
-
-            re += ar * br + ai * bi;
-            im += ai * br - ar * bi;
-
-            energy += ar * ar + ai * ai;
+            sum_re += sr * zr + si * zi;
+            sum_im += si * zr - sr * zi;
         }
 
-        float corr = re * re + im * im;
-        float v = corr / (energy * zc_energy + 1e-12f);
+        float norm = (sum_re * sum_re + sum_im * sum_im) / (current_sig_energy * zc_energy + 1e-12f);
+        plato[n] = norm;
 
-        plato[k] = v;
+        if (n < L - N) {
+            current_sig_energy -= (r_offset[0]*r_offset[0] + r_offset[1]*r_offset[1]);
+            current_sig_energy += (r[2*(n+N)]*r[2*(n+N)] + r[2*(n+N)+1]*r[2*(n+N)+1]);
+            if (current_sig_energy < 0) current_sig_energy = 0;
+        }
 
-        if (v > best_val)
+        if (norm > max_norm)
         {
-            best_val = v;
-            best_pos = k;
+            max_norm = norm;
+            best_idx = static_cast<int>(n);
         }
     }
-
-    return best_pos;
+    return best_idx;
 }
 
 int ofdm_cp_sync(const std::vector<std::complex<float>> &r, int N, int Lcp, std::vector<float> &plato)
