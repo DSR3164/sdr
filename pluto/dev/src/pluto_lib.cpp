@@ -258,7 +258,6 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, SharedData
     if (N < 4 or pilot_spacing < 2)
         return;
 
-    buffer.clear();
     std::vector<std::complex<double>> symbols(bits.size() / 1);
     std::vector<std::complex<float>> schmidl(N);
     auto zc = generate_zc(127, 5);
@@ -297,20 +296,12 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, SharedData
     int symbols_per_ofdm = static_cast<int>(data.size());
     int num_ofdm_symbols = total_qpsk / symbols_per_ofdm;
 
-    buffer.reserve((num_ofdm_symbols + Ncp) * (N + 2));
-
     ifft.in[0][0] = 0;
     ifft.in[0][1] = 0;
 
     if (*ofdm_config.preamble == 0)
     {
-        for (size_t i = 1; i <= 63; ++i)
-        {
-            ifft.in[i][0] = zc[i - 1].real();
-            ifft.in[i][1] = zc[i - 1].imag();
-        }
-
-        for (size_t i = 64; i <= 127; ++i)
+        for (size_t i = 1; i <= 127; ++i)
         {
             ifft.in[i][0] = zc[i - 1].real();
             ifft.in[i][1] = zc[i - 1].imag();
