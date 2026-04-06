@@ -221,6 +221,7 @@ void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vecto
     size_t N = static_cast<size_t>(ofdm_config.n_subcarriers);
     int PS = ofdm_config.pilot_spacing;
 
+    data.clear();
     pilots.clear();
     is_pilot.resize(N, false);
     is_guard.resize(N, false);
@@ -228,12 +229,12 @@ void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vecto
     int counter = 0;
     for (size_t k = 0; k < N; ++k)
     {
-        if ((k > N / 2 - 28 and k < N / 2 + 27) or k == 0)
+        if (k == 0 || (k >= 37 && k <= 91))
         {
             is_guard[k] = true;
             continue;
         }
-        if (counter % PS == 0)
+        if ((counter % PS == 0) || (k == N / 2 - 28) || (k == N / 2 + 28) || (k == N - 1))
         {
             pilots.push_back(k);
             is_pilot[k] = true;
@@ -261,7 +262,7 @@ void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vecto
             is_guard[k] = true;
             continue;
         }
-        if (counter % PS == 0)
+        if ((counter % PS == 0) || (k == N / 2 - 28) || (k == N / 2 + 28) || (k == N - 1))
         {
             pilots.push_back(k);
             is_pilot[k] = true;
@@ -281,10 +282,11 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t &cfg)
     input.clear();
 
     std::vector<int> pilots;
+    std::vector<int> data;
     std::vector<bool> is_pilot(N, false);
     std::vector<bool> is_guard(N, false);
 
-    calculate_pilots_and_guard(ofdm_config, pilots, is_pilot, is_guard);
+    calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
 
     std::vector<std::complex<float>> H_prev(N, { 1,0 });
 
