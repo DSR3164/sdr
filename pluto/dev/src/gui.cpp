@@ -618,6 +618,9 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
         else
             continue;
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+        start = std::chrono::steady_clock::now();
+        std::atomic_signal_fence(std::memory_order_seq_cst);
 
         if (data.mod.ModulationType == 0 or // BPSK
             data.mod.ModulationType == 1 or // QPSK
@@ -645,13 +648,7 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
                 switch (data.dsp.sync)
                 {
                 case 0:
-                    std::atomic_signal_fence(std::memory_order_seq_cst);
-                    start = std::chrono::steady_clock::now();
-                    std::atomic_signal_fence(std::memory_order_seq_cst);
                     data.dsp.max_index = zc_sync(for_ofdm, zadoff_chu, zc_energy, data.gui.plato);
-                    std::atomic_signal_fence(std::memory_order_seq_cst);
-                    end = std::chrono::steady_clock::now();
-                    std::atomic_signal_fence(std::memory_order_seq_cst);
                     break;
                 case 1:
                     data.dsp.max_index = ofdm_cp_sync(for_ofdm, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.n_cp, data.gui.plato);
@@ -698,6 +695,9 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
 
         }
 
+        std::atomic_signal_fence(std::memory_order_seq_cst);
+        end = std::chrono::steady_clock::now();
+        std::atomic_signal_fence(std::memory_order_seq_cst);
 
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
         data.history.sdrtime.push_back(data.gui.timed / 1e3);
