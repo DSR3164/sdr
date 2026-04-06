@@ -82,7 +82,7 @@ typedef struct SharedData
 
         float cfo = 0.0f;
         int max_index = 0;
-        int offset = 0;
+        int offset = -2;
         int sync = 0;
     } dsp;
 
