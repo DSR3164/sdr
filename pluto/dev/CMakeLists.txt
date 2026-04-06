@@ -111,7 +111,7 @@ target_link_libraries(gui PRIVATE
 
 # Warnings
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-  target_compile_options(pluto_core PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion)
+  target_compile_options(pluto_core PRIVATE -O3 -mavx2 -ffast-math -Wall -Wextra -Wpedantic -Wshadow -Wconversion)
   target_compile_options(gui PRIVATE -Wall -Wextra -Wpedantic)
   # target_compile_options(tx PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(main PRIVATE -Wall -Wextra -Wpedantic)
