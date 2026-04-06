@@ -94,10 +94,10 @@ typedef struct SharedData
         bool symbol_sync = false;
         bool eq = true;
         bool fft = true;
-        int n_subcarriers;
-        int pilot_spacing;
-        int n_cp;
-        bool cfo;
+        int n_subcarriers = 128;
+        int pilot_spacing = 25;
+        int n_cp = 32;
+        bool cfo = true;
         int *preamble;
     } ofdm_cfg;
 
