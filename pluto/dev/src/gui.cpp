@@ -219,6 +219,75 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
             }
             ImGui::End();
 
+            ImGui::Begin("OFDM Grid");
+            {
+                std::vector<bool> is_pilot(data.ofdm_cfg.n_subcarriers);
+                std::vector<bool> is_guard(data.ofdm_cfg.n_subcarriers);
+                std::vector<int> pilots(data.ofdm_cfg.n_subcarriers);
+                std::vector<int> datas(data.ofdm_cfg.n_subcarriers);
+
+                calculate_pilots_and_guard(data.ofdm_cfg, pilots, datas, is_pilot, is_guard);
+
+                static int N = data.ofdm_cfg.n_subcarriers;
+                std::vector<float> grid(N);
+                for (int k = 0; k < N; ++k)
+                {
+                    if (is_guard[k]) grid[k] = 0.0f;
+                    else if (is_pilot[k]) grid[k] = 1.0f;
+                    else grid[k] = 0.5f;
+                }
+                std::rotate(grid.begin(), grid.begin() + N / 2, grid.end());
+                if (ImPlot::BeginPlot("OFDM Grid", ImGui::GetContentRegionAvail()))
+                {
+                    ImPlot::SetupAxes("Subcarrier", "", ImPlotAxisFlags_None, ImPlotAxisFlags_NoDecorations);
+                    ImPlot::SetupAxisLimits(ImAxis_X1, -N / 2 - 0.5, N / 2 - 0.5, ImGuiCond_Always);
+                    ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1, ImGuiCond_Always);
+                    const char *labels[3] = { "Guard", "Data", "Pilot" };
+                    static ImVec4 colors[] = {
+                        ImVec4(0.1f, 0.1f, 0.1f, 1.0f),  // Guard - тёмный
+                        ImVec4(0.2f, 0.6f, 1.0f, 1.0f),  // Data - синий
+                        ImVec4(1.0f, 0.5f, 0.0f, 1.0f),  // Pilot - оранжевый
+                    };
+                    static ImPlotColormap cmap = ImPlot::AddColormap("OFDM", colors, 3);
+
+                    ImPlot::PushColormap(cmap);
+                    ImPlot::PlotHeatmap("##grid", grid.data(), 1, N, 0, 1, nullptr,
+                        ImPlotPoint(-N / 2 - 0.5, 0), ImPlotPoint(N / 2 - 0.5, 1));
+
+                    std::vector<int> counts = {
+                        (int)(N - datas.size() - pilots.size()),
+                        (int)datas.size(),
+                        (int)pilots.size()
+                    };
+
+                    for (int i = 0; i < 3; ++i)
+                    {
+                        char label[32];
+                        snprintf(label, sizeof(label), "%s %d", labels[i], counts[i]);
+                        ImPlot::PushStyleColor(ImPlotCol_Line, colors[i]);
+                        ImPlot::PlotDummy(label);
+                        ImPlot::PopStyleColor();
+                    }
+                    ImPlot::PopColormap();
+
+                    if (ImPlot::IsPlotHovered())
+                    {
+                        ImPlotPoint mp = ImPlot::GetPlotMousePos(ImAxis_X1, ImAxis_Y1);
+                        int screen_pos = static_cast<int>(std::round(mp.x));
+                        int k = (screen_pos + N) % N;
+                        if (k >= 0 && k < N)
+                        {
+                            const char *type = is_guard[k] ? "Guard" : is_pilot[k] ? "Pilot" : "Data";
+                            ImGui::BeginTooltip();
+                            ImGui::Text("k=%d  %s", k, type);
+                            ImGui::EndTooltip();
+                        }
+                    }
+                    ImPlot::EndPlot();
+                }
+            }
+            ImGui::End();
+
             if (data.gui.debug)
             {
                 ImGui::Begin("Channel Est");
