@@ -206,10 +206,11 @@ namespace gui
 
         if (ImGui::TreeNode("Debug"))
         {
-            ImGui::Text("SDR Cycle: %.f", data.gui.timed);
             ImGui::Text("FPS: %.1f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
-            ImGui::Text("Index %d", data.dsp.max_index);
-            ImGui::Text("Offset %.1f", data.dsp.cfo);
+            ImGui::Text("Frame start: %d", data.dsp.max_index);
+            ImGui::Text("CFO: %.1f", data.dsp.cfo);
+            ImGui::Text("AD9361: %.2fC", std::stof(context.sdr->readSensor("ad9361-phy_temp0")));
+            ImGui::Text("XADC: %.2fC", std::stof(context.sdr->readSensor("xadc_temp0")));
             ImGui::Checkbox("Debug", &data.gui.debug);
             ImGui::TreePop();
             ImGui::Spacing();
