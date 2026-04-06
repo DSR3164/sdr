@@ -380,13 +380,21 @@ namespace gui
                 ImGui::Checkbox("FFT", &data.ofdm_cfg.fft);
                 ImGui::SameLine();
                 ImGui::Checkbox("Equa", &data.ofdm_cfg.eq);
-                if (ImGui::SliderInt("OFDM subcarriers", &data.ofdm_cfg.n_subcarriers, 4, std::round(context.sample_rate / 15e3)))
+                ImGui::Text("OFDM subcarriers");
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::SliderInt("##OFDM subcarriers", &data.ofdm_cfg.n_subcarriers, 4, std::round(context.sample_rate / 15e3)))
                     context.flags |= Flags::REMODULATION;
-                if (ImGui::SliderInt("OFDM CP len", &data.ofdm_cfg.n_cp, 4, 64))
+                ImGui::Text("CP lenght");
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::SliderInt("##OFDM CP len", &data.ofdm_cfg.n_cp, 4, 64))
                     context.flags |= Flags::REMODULATION;
-                if (ImGui::SliderInt("OFDM Pilot Spacing", &data.ofdm_cfg.pilot_spacing, 2, std::round(context.sample_rate / 15e3) - 3))
+                ImGui::Text("Pilots spacing");
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::SliderInt("##OFDM Pilot Spacing", &data.ofdm_cfg.pilot_spacing, 2, std::round(context.sample_rate / 15e3) - 3))
                     context.flags |= Flags::REMODULATION;
-                ImGui::InputInt("OFDM Symbol Offset", &data.dsp.offset, 1, -1);
+                ImGui::Text("Frame start offset");
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                ImGui::InputInt("##OFDM Symbol Offset", &data.dsp.offset, 1, -1);
             }
             else
             {
