@@ -184,7 +184,17 @@ int ofdm_cp_sync(const std::vector<std::complex<float>> &r, int N, int Lcp, std:
     for (int d = 0; d < size - N - Lcp; d++)
     {
 
-        float metric = std::norm(P) / (R * R + 1e-12f);
+        float R_cp = 0.0f;
+        float R_tail = 0.0f;
+
+        for (int i = 0; i < Lcp; i++)
+        {
+            R_cp += std::norm(r[d + i]);
+            R_tail += std::norm(r[d + i + N]);
+        }
+
+        float denom = 0.5f * (R_cp + R_tail);
+        float metric = std::norm(P) / (denom * denom + 1e-12f);
 
         if (metric > max_metric)
         {
