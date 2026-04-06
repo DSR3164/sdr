@@ -427,3 +427,4 @@ void gen_bits(int N, std::vector<int> &bits);
 
 std::vector<std::complex<float>> generate_minn_preamble(size_t N);
 std::vector<std::complex<float>> generate_zc(int L, int q);
+void qam64_demapper_3gpp(const std::vector<std::complex<float>> &symbols, std::vector<int> &bits);

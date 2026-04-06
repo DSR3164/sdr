@@ -44,6 +44,29 @@ void qam64_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<do
         / sqrt(42.0);
 }
 
+void qam64_demapper_3gpp(const std::vector<std::complex<float>> &symbols, std::vector<int> &bits)
+{
+    bits.resize(symbols.size() * 6);
+    const float scale = sqrt(42.0f);
+
+    for (size_t i = 0; i < symbols.size(); ++i)
+    {
+        float I = symbols[i].real() * scale;
+        float Q = symbols[i].imag() * scale;
+
+        bits[6 * i + 0] = (I < 0) ? 1 : 0;
+        bits[6 * i + 1] = (Q < 0) ? 1 : 0;
+
+        bits[6 * i + 2] = (std::abs(I) < 4.0f) ? 0 : 1;
+        bits[6 * i + 3] = (std::abs(Q) < 4.0f) ? 0 : 1;
+
+        float absI2 = std::abs(std::abs(I) - 4.0f);
+        float absQ2 = std::abs(std::abs(Q) - 4.0f);
+        bits[6 * i + 4] = (absI2 < 2.0f) ? 0 : 1;
+        bits[6 * i + 5] = (absQ2 < 2.0f) ? 0 : 1;
+    }
+}
+
 void upsample(const std::vector<std::complex<double>> &symbols, std::vector<std::complex<double>> &upsampled, int up)
 {
     if (upsampled.size() < symbols.size() * up)
