@@ -127,9 +127,10 @@ int zc_sync(const std::vector<std::complex<float>> &rx, const std::vector<std::c
     int best_idx = -1;
 
     float current_sig_energy = 0.0f;
-    for (size_t k = 0; k < N; ++k) {
+    for (size_t k = 0; k < N; ++k)
+    {
         const float *__restrict r_offset = &r[2 * k];
-        current_sig_energy += r_offset[0]*r_offset[0] + r_offset[1]*r_offset[1];
+        current_sig_energy += r_offset[0] * r_offset[0] + r_offset[1] * r_offset[1];
     }
 
     for (size_t n = 0; n <= L - N; ++n)
@@ -151,9 +152,10 @@ int zc_sync(const std::vector<std::complex<float>> &rx, const std::vector<std::c
         float norm = (sum_re * sum_re + sum_im * sum_im) / (current_sig_energy * zc_energy + 1e-12f);
         plato[n] = norm;
 
-        if (n < L - N) {
-            current_sig_energy -= (r_offset[0]*r_offset[0] + r_offset[1]*r_offset[1]);
-            current_sig_energy += (r[2*(n+N)]*r[2*(n+N)] + r[2*(n+N)+1]*r[2*(n+N)+1]);
+        if (n < L - N)
+        {
+            current_sig_energy -= (r_offset[0] * r_offset[0] + r_offset[1] * r_offset[1]);
+            current_sig_energy += (r[2 * (n + N)] * r[2 * (n + N)] + r[2 * (n + N) + 1] * r[2 * (n + N) + 1]);
             if (current_sig_energy < 0) current_sig_energy = 0;
         }
 
@@ -272,14 +274,14 @@ void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vecto
 };
 
 
-void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t &cfg)
+void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t::OFDMConfig ofdm_config, std::vector<std::complex<float>> &h_est)
 {
-    auto ofdm_config = cfg.ofdm_cfg;
-    cfg.gui.estimation.clear();
     int N = ofdm_config.n_subcarriers;
+    float accumulated_phase = 0;
     const std::complex<float> known_pilot = { 1.0f, 0.0f };
     std::vector<std::complex<float>> temp = input;
     input.clear();
+    h_est.clear();
 
     std::vector<int> pilots;
     std::vector<int> data;
@@ -338,23 +340,36 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t &cfg)
         for (int k = pilots.back() + 1; k < N; ++k)
             if (!is_guard[k]) H[k] = H[pilots.back()];
 
-        for (auto &x : H)
-            cfg.gui.estimation.push_back(x);
-
         for (int k = 1; k < N; ++k)
             if (std::abs(H[k]) > 1e-12f)
                 equalized[k] = sym[k] / H[k];
             else
                 equalized[k] = sym[k];
 
-        float phase = 0;
+        for (auto &k : H)
+            h_est.push_back(k);
+
+        float cpe = 0;
+        int count = 0;
         for (auto k : pilots)
-            phase += std::arg(equalized[k] / known_pilot);
+        {
+            cpe += std::arg(equalized[k] / known_pilot);
+            count++;
+        }
+        if (count > 0) cpe /= count;
 
-        phase /= pilots.size();
+        accumulated_phase += cpe;
 
-        std::complex<float> rot = std::exp(std::complex<float>(0, -phase));
+        float mean_amp_pilots = 0;
+        for (auto k : pilots)
+            mean_amp_pilots += std::abs(equalized[k]);
+        mean_amp_pilots /= pilots.size();
 
+        for (int k = 0; k < N; ++k)
+            if (!is_guard[k])
+                equalized[k] /= mean_amp_pilots;
+
+        std::complex<float> rot = std::exp(std::complex<float>(0, -accumulated_phase));
         for (int k = 0; k < N; ++k)
             if (!is_guard[k])
                 equalized[k] *= rot;
@@ -380,7 +395,8 @@ float estimate_cfo(const std::vector<std::complex<float>> &rx, int N, int max_in
     return cfo;
 }
 
-float schmidl_cox_detect(const std::vector<std::complex<float>> &rx, int N, float &cfo_est, int &max_index, std::vector<float> &plato) {
+float schmidl_cox_detect(const std::vector<std::complex<float>> &rx, int N, float &cfo_est, int &max_index, std::vector<float> &plato)
+{
     size_t L = N / 2;
     size_t rx_size = rx.size();
     if (rx_size < N) return 0.0f;
@@ -389,29 +405,28 @@ float schmidl_cox_detect(const std::vector<std::complex<float>> &rx, int N, floa
     float R = 0.0f;
     float max_metric = 0.0f;
 
-    // 1. Инициализация первого окна (i = 0)
-    for (size_t n = 0; n < L; ++n) {
+    for (size_t n = 0; n < L; ++n)
+    {
         P += rx[n] * std::conj(rx[n + L]);
         R += std::norm(rx[n + L]);
     }
 
-    // 2. Скользящее окно
-    for (size_t i = 0; i <= rx_size - N; ++i) {
-        // Вычисляем метрику: |P|^2 / R^2
+    for (size_t i = 0; i <= rx_size - N; ++i)
+    {
         float metric = (R > 0) ? (std::norm(P) / (R * R)) : 0.0f;
         plato[i] = metric;
 
-        if (metric > max_metric) {
+        if (metric > max_metric)
+        {
             max_metric = metric;
             max_index = i;
-            // CFO можно посчитать тут: cfo_est = std::arg(P) / M_PI;
         }
 
-        // Сдвигаем окно (убираем rx[i], добавляем rx[i+1])
-        if (i + N < rx_size) {
+        if (i + N < rx_size)
+        {
             std::complex<float> out_term = rx[i] * std::conj(rx[i + L]);
             std::complex<float> in_term = rx[i + L] * std::conj(rx[i + N]);
-            
+
             P = P - out_term + in_term;
             R = R - std::norm(rx[i + L]) + std::norm(rx[i + N]);
         }
@@ -476,7 +491,7 @@ std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> 
         float epsilon = std::arg(corr) / (2 * M_PIf);
         float delta_f = epsilon * fs / N;
 
-        data.dsp.cfo = delta_f;
+        // data.dsp.cfo = delta_f;
 
         for (int n = 0; n < N + CP; ++n)
         {
@@ -486,4 +501,14 @@ std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> 
     }
 
     return corrected;
+}
+
+float coarse_cfo(const std::vector<std::complex<float>> &r, int max_index, int N, int Lcp, float fs)
+{
+    std::complex<float> P = 0.0f;
+    for (int i = 0; i < Lcp; ++i)
+        P += r[max_index + i] * std::conj(r[max_index + i + N]);
+
+    float epsilon = std::arg(P) / (2 * M_PIf);
+    return epsilon * fs / N;
 }

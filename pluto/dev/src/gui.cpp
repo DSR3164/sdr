@@ -58,7 +58,6 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-
     while (running)
     {
         SDL_Event event;
@@ -290,14 +289,35 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
 
             if (data.gui.debug)
             {
-                ImGui::Begin("Channel Est");
-                if (ImPlot::BeginPlot("Est", ImGui::GetContentRegionAvail()))
+                ImGui::Begin("Channel estimation");
                 {
-                    ImPlot::PlotLine("I", reinterpret_cast<const float *>(data.gui.estimation.data()),
-                        data.gui.estimation.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
-                    ImPlot::PlotLine("Q", reinterpret_cast<const float *>(data.gui.estimation.data()) + 1,
-                        data.gui.estimation.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
-                    ImPlot::EndPlot();
+                    if (ImPlot::BeginPlot("Channel est", ImGui::GetContentRegionAvail()))
+                    {
+                        std::vector<float> abs;
+                        for (auto &x : data.gui.estimation)
+                            abs.push_back(std::abs(x));
+                        if (!data.gui.estimation.empty())
+                        {
+                            ImPlot::PlotLine("I",
+                                reinterpret_cast<const float *>(data.gui.estimation.data()),
+                                1.0, 0, 0, sizeof(std::complex<float>));
+
+                            ImPlot::PlotLine("Q",
+                                reinterpret_cast<const float *>(data.gui.estimation.data()) + 1,
+                                1.0, 0, 0, sizeof(std::complex<float>));
+                        }
+
+                        ImPlot::EndPlot();
+                    }
+
+                    ImGui::End();
+                    ImGui::Begin("Compare");
+                    if (ImPlot::BeginPlot("Bits", ImGui::GetContentRegionAvail()))
+                    {
+                        ImPlot::PlotLine("Bits TX", data.dsp.bits_tx.data(), data.dsp.bits_tx.size());
+                        ImPlot::PlotLine("Bits RX", data.dsp.bits_rx.data(), data.dsp.bits_rx.size());
+                        ImPlot::EndPlot();
+                    }
                 }
                 ImGui::End();
                 ImGui::Begin("SDR Time");
@@ -517,8 +537,8 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
             if (ImPlot::BeginPlot("FFT", sz))
             {
 
-                ImPlot::SetupAxisLimits(ImAxis_X1, context.sample_rate / -2, context.sample_rate / 2, ImGuiCond_Always);
-                ImPlot::SetupAxisLimits(ImAxis_Y1, -80.0, 30.0, ImGuiCond_Always);
+                ImPlot::SetupAxisLimits(ImAxis_X1, context.sample_rate / -2, context.sample_rate / 2, ImGuiCond_Once);
+                ImPlot::SetupAxisLimits(ImAxis_Y1, -80.0, 30.0, ImGuiCond_Once);
                 ImPlot::SetupAxis(ImAxis_Y1, "", ImPlotAxisFlags_NoTickLabels | ImPlotAxisFlags_NoTickMarks);
 
                 ImPlot::PlotLine("Spectrum", x_hz.data(), spec_smooth.data(), fft_vec.size());
@@ -572,11 +592,9 @@ int run_sdr(sdr_config_t &context, SharedData_t &data)
         return -1;
     }
     auto start = std::chrono::steady_clock::now();
-    int N = data.ofdm_cfg.n_subcarriers * 10 * 4;
-    std::vector<int> bits(N, 0);
     std::vector<int16_t> tx_buffer;
-    gen_bits(N, bits);
-    gui::change_modulation(context, tx_buffer, bits, data);
+    gen_bits(data.dsp.N, data.dsp.bits_tx);
+    gui::change_modulation(context, tx_buffer, data.dsp.bits_tx, data);
 
     void *tx_buffs[] = { tx_buffer.data() };
     int flags = SOAPY_SDR_HAS_TIME;
@@ -588,7 +606,7 @@ int run_sdr(sdr_config_t &context, SharedData_t &data)
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     data.gui.timed = 0.01 * duration.count() + 0.99 * data.gui.timed;
     std::cout << "First SDR init " << modulations[context.modulation_type] << " " << duration.count() << " mcs\n";
-    std::cout << "With [SIZE] = " << bits.size() << " bits\n";
+    std::cout << "With [SIZE] = " << data.dsp.bits_tx.size() << " bits\n";
     while (!has_flag(context.flags, Flags::EXIT))
     {
         if (k >= buff_count) k = 0;
@@ -601,7 +619,7 @@ int run_sdr(sdr_config_t &context, SharedData_t &data)
         if (has_flag(context.flags, Flags::REMODULATION))
         {
             auto start = std::chrono::steady_clock::now();
-            gui::change_modulation(context, tx_buffer, bits, data);
+            gui::change_modulation(context, tx_buffer, data.dsp.bits_tx, data);
             k = 0;
             buff_count = tx_buffer.size() / (context.buffer_size * 2.0);
             auto end = std::chrono::steady_clock::now();
@@ -632,7 +650,7 @@ int run_sdr(sdr_config_t &context, SharedData_t &data)
         if (has_flag(context.flags, Flags::SEND))
         {
             tx_buffs[0] = static_cast<void *>(tx_buffer.data());
-            int send = context.sdr->writeStream(context.txStream, (const void *const *)tx_buffs, context.buffer_size, flags, timeNs + (4 * 1000 * 1000), timeoutUs);
+            int send = context.sdr->writeStream(context.txStream, (const void *const *)tx_buffs, tx_buffer.size() / 2, flags, timeNs + (4 * 1000 * 1000), timeoutUs);
             data.history.send.push_back(send);
             if (static_cast<int>(data.history.send.size()) > context.buffer_size * 4)
                 data.history.send.erase(data.history.send.begin());
@@ -654,15 +672,23 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
     auto &raw = data.mod.raw;
     float zc_energy = 0.0f;
 
+    std::vector<bool> is_pilot(data.ofdm_cfg.n_subcarriers);
+    std::vector<bool> is_guard(data.ofdm_cfg.n_subcarriers);
+    std::vector<int> pilots(data.ofdm_cfg.n_subcarriers);
+    std::vector<int> datas(data.ofdm_cfg.n_subcarriers);
+
+    calculate_pilots_and_guard(data.ofdm_cfg, pilots, datas, is_pilot, is_guard);
+
     std::vector<std::complex<float>> for_ofdm;
     std::vector<int16_t> temp(context.buffer_size * 2, 0);
+    std::vector<float> dummy(context.buffer_size, 0);
     for_ofdm.reserve(context.buffer_size * 2);
     std::vector<std::complex<float>> zadoff_chu = ofdm_zadoff_chu_symbol(data);
     static float cfo = 0.0f;
     const float *zptr = reinterpret_cast<const float *>(zadoff_chu.data());
     for (int n = 0; n < zadoff_chu.size() * 2; ++n)
         zc_energy += zptr[n] * zptr[n];
-    
+
 
     while (!has_flag(context.flags, Flags::EXIT))
     {
@@ -720,8 +746,27 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
                     data.dsp.max_index = zc_sync(for_ofdm, zadoff_chu, zc_energy, data.gui.plato);
                     break;
                 case 1:
-                    data.dsp.max_index = ofdm_cp_sync(for_ofdm, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.n_cp, data.gui.plato);
-                    break;
+                {
+                    static float coarse_mean = 0.0f;
+                    data.dsp.max_index = ofdm_cp_sync(for_ofdm, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.n_cp, dummy);
+                    float coarse = coarse_cfo(for_ofdm, data.dsp.max_index, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.n_cp, context.sample_rate);
+                    for (size_t n = 0; n < for_ofdm.size(); ++n)
+                    {
+                        float phase = 2 * M_PIf * coarse * n / context.sample_rate;
+                        for_ofdm[n] *= std::complex<float>(std::cos(phase), std::sin(phase));
+                    }
+                    coarse_mean = 0.1f * coarse + 0.9f * coarse_mean;
+                    data.dsp.cfo = coarse_mean;
+
+                    // if (std::abs(coarse_mean) > 6000.0f)
+                    // {
+                    //     context.rx_carrier_freq -= coarse_mean;
+                    //     context.flags |= Flags::APPLY_FREQUENCY;
+                    //     coarse_mean = 0.0f;
+                    // }
+                    data.dsp.max_index = zc_sync(for_ofdm, zadoff_chu, zc_energy, data.gui.plato);
+                }
+                break;
                 case 2:
                     schmidl_cox_detect(for_ofdm, data.ofdm_cfg.n_subcarriers, data.dsp.cfo, data.dsp.max_index, data.gui.plato);
                     break;
@@ -736,7 +781,18 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
             if (static_cast<int>(for_ofdm.size()) > data.dsp.max_index + data.ofdm_cfg.n_subcarriers * 2)
                 next += data.dsp.max_index + (data.ofdm_cfg.symbol_sync ? 0 : data.ofdm_cfg.n_subcarriers) + data.dsp.offset;
             int last = -data.ofdm_cfg.n_subcarriers;
-            for (size_t n = 0; n < 10; ++n)
+            int bsr = 1;
+            switch (data.mod.ModulationType)
+            {
+            case 0: bsr = 1; break;
+            case 1: bsr = 2; break;
+            case 2: bsr = 4; break;
+            case 4: bsr = 6; break;
+            default:
+                break;
+            }
+            size_t expected_sym_count = ((data.dsp.N / bsr) / (datas.size()));
+            for (size_t n = 0; n < expected_sym_count; ++n)
             {
                 if (static_cast<int>(for_ofdm.size()) - next < data.ofdm_cfg.n_subcarriers + data.ofdm_cfg.n_cp)
                     break;
@@ -757,11 +813,11 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
                 next += data.ofdm_cfg.n_subcarriers;
                 last = next;
             }
-            // data.mod.ofdm.erase(data.mod.ofdm.begin() + last, data.mod.ofdm.end());
+            if (last > 0) data.mod.ofdm.erase(data.mod.ofdm.begin() + last, data.mod.ofdm.end());
             if (data.ofdm_cfg.eq)
-                ofdm_equalize(data.mod.ofdm, data);
+                ofdm_equalize(data.mod.ofdm, data.ofdm_cfg, data.gui.estimation);
             data.gui_buff.write(data.mod.ofdm);
-
+            qam64_demapper_3gpp(data.mod.ofdm, data.dsp.bits_rx);
         }
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -811,8 +867,7 @@ int main(int argc, char *argv[])
     sdr.modulation_type = 4;
     sdr.flags |= Flags::APPLY_BANDWIDTH;
     int subcarrier_count = static_cast<int>(sdr.sample_rate / 15e3);
-    SharedData_t data(sdr.buffer_size, subcarrier_count, 32, 6, 4);
-    data.ofdm_cfg.cfo = true;
+    SharedData_t data(sdr.buffer_size, subcarrier_count, 32, 25, 4);
 
     std::thread gui_thread(run_gui, std::ref(sdr), std::ref(data));
     std::thread sdr_thread(run_sdr, std::ref(sdr), std::ref(data));

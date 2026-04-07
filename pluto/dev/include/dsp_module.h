@@ -70,6 +70,9 @@ typedef struct SharedData
 
     struct DSP
     {
+        int N = 128 * 2 * 6;
+        std::vector<int> bits_tx;
+        std::vector<int> bits_rx;
         double gardner_band = 1;
         double costas_band = 15e-4;
         float scale_coef = 1.0f;
@@ -141,13 +144,15 @@ typedef struct SharedData
         gui_buff(samples_in_buffer * 2)
     {
         history.receive.reserve(samples_in_buffer * 11);
-
+        
         mod.raw.resize(samples_in_buffer);
         mod.conv.resize(samples_in_buffer);
         mod.sync.resize(samples_in_buffer);
         mod.demodul.resize(samples_in_buffer);
         mod.ofdm.resize(samples_in_buffer);
-
+        dsp.bits_rx.reserve(dsp.N);
+        dsp.bits_tx.reserve(dsp.N);
+        
         mod.ModulationType = mod_type;
         ofdm_cfg.n_subcarriers = n;
         ofdm_cfg.pilot_spacing = ps;
@@ -158,7 +163,7 @@ typedef struct SharedData
         history.sdrtime.resize(1920);
         history.send.resize(1920);
         history.receive.resize(1920);
-
+        
         ofdm_cfg.preamble = &dsp.sync;
     }
 
@@ -171,8 +176,9 @@ float estimate_cfo(const std::vector<std::complex<float>> &rx, int N, int max_in
 float schmidl_cox_detect(const std::vector<std::complex<float>> &rx, int N, float &cfo_est, int &max_index, std::vector<float> &plato);
 int zc_sync(const std::vector<std::complex<float>> &rx, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, std::vector<float> &plato);
 int ofdm_cp_sync(const std::vector<std::complex<float>> &r, int N, int Lcp, std::vector<float> &plato);
-void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t &ofdm_config);
+void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t::OFDMConfig ofdm_config, std::vector<std::complex<float>> &h_est);
 std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> &signal, SharedData &sd, sdr_config_s &context);
 std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(SharedData_t &data);
 void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vector<int> &pilots, std::vector<bool> &is_pilot, std::vector<bool> &is_guard);
 void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vector<int> &pilots, std::vector<int> &data, std::vector<bool> &is_pilot, std::vector<bool> &is_guard);
+float coarse_cfo(const std::vector<std::complex<float>> &r, int max_index, int N, int Lcp, float fs);
