@@ -817,7 +817,7 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
             if (data.ofdm_cfg.eq)
                 ofdm_equalize(data.mod.ofdm, data.ofdm_cfg, data.gui.estimation);
             data.gui_buff.write(data.mod.ofdm);
-            qam64_demapper_3gpp(data.mod.ofdm, data.dsp.bits_rx);
+            demodulate(data, data.mod.ofdm, data.dsp.bits_rx);
         }
 
         std::atomic_signal_fence(std::memory_order_seq_cst);

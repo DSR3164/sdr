@@ -44,6 +44,49 @@ void qam64_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<do
         / sqrt(42.0);
 }
 
+static std::pair<uint8_t, uint8_t> demap_component_3gpp(float val)
+{
+    uint8_t b_sign = (val < 0.0f) ? 1 : 0;
+    uint8_t b_amp = (std::abs(val) < 2.0f) ? 0 : 1;
+    return {b_sign, b_amp};
+}
+
+void bpsk_demapper_3gpp(const std::vector<std::complex<float>> &symbols, std::vector<int> &bits)
+{
+    bits.resize(symbols.size());
+
+    for (size_t i = 0; i < symbols.size(); ++i)
+        bits[i] = demap_component_3gpp(symbols[i].real()).first;
+}
+
+void qpsk_demapper_3gpp(const std::vector<std::complex<float>> &symbols, std::vector<int> &bits)
+{
+    bits.resize(symbols.size() * 2);
+
+    for (size_t i = 0; i < symbols.size(); ++i)
+    {
+        bits[2 * i + 0] = demap_component_3gpp(symbols[i].real()).first;
+        bits[2 * i + 1] = demap_component_3gpp(symbols[i].imag()).first;
+    }
+}
+
+void qam16_demapper_3gpp(const std::vector<std::complex<float>> &symbols, std::vector<int> &bits)
+{
+    bits.resize(symbols.size() * 4);
+    const float scale = std::sqrt(10.0f);
+
+    for (size_t i = 0; i < symbols.size(); ++i)
+    {
+        auto [b0, b2] = demap_component_3gpp(symbols[i].real() * scale);
+        auto [b1, b3] = demap_component_3gpp(symbols[i].imag() * scale);
+
+        bits[4 * i + 0] = b0;
+        bits[4 * i + 1] = b1;
+        bits[4 * i + 2] = b2;
+        bits[4 * i + 3] = b3;
+    }
+}
+
 void qam64_demapper_3gpp(const std::vector<std::complex<float>> &symbols, std::vector<int> &bits)
 {
     bits.resize(symbols.size() * 6);
@@ -64,6 +107,34 @@ void qam64_demapper_3gpp(const std::vector<std::complex<float>> &symbols, std::v
         float absQ2 = std::abs(std::abs(Q) - 4.0f);
         bits[6 * i + 4] = (absI2 < 2.0f) ? 0 : 1;
         bits[6 * i + 5] = (absQ2 < 2.0f) ? 0 : 1;
+    }
+}
+
+void demodulate(SharedData_t &data, const std::vector<std::complex<float>> &symbols, std::vector<int> &bits)
+{
+    auto &mod = data.ofdm_cfg.mod;
+    bits.clear();
+
+    switch (mod)
+    {
+    case 0:
+        bpsk_demapper_3gpp(symbols, bits);
+        break;
+    case 1:
+        bits.resize(symbols.size() * 2);
+        qpsk_demapper_3gpp(symbols, bits);
+        break;
+    case 2:
+        bits.resize(symbols.size() * 4);
+        qam16_demapper_3gpp(symbols, bits);
+        break;
+    case 3:
+        bits.resize(symbols.size() * 6);
+        qam64_demapper_3gpp(symbols, bits);
+        break;
+    default:
+        std::cout << "No such demapper\n";
+        break;
     }
 }
 
@@ -115,7 +186,7 @@ void rrc(double beta, int sps, int N, std::vector<double> &h)
             h[i] = 1.0 - beta + 4 * beta / M_PIf;
         else if (std::abs(std::abs(t) - T / (4 * beta)) < eps)
             h[i] = (beta / sqrt(2)) * ((1 + 2 / M_PIf) * sin(M_PIf / (4 * beta)) +
-                (1 - 2 / M_PIf) * cos(M_PIf / (4 * beta)));
+                                       (1 - 2 / M_PIf) * cos(M_PIf / (4 * beta)));
         else
             h[i] = (sin(M_PIf * t * (1 - beta) / T) + 4 * beta * t / T * cos(M_PIf * t * (1 + beta) / T)) / (M_PIf * t * (1 - (4 * beta * t / T) * (4 * beta * t / T)));
     }
@@ -125,10 +196,10 @@ void filter_rrc(const std::vector<std::complex<double>> &a, const std::vector<do
 {
     size_t nb = b.size();
     size_t na = a.size();
-    y.resize(na + nb - 1, { 0.0f, 0.0f });
+    y.resize(na + nb - 1, {0.0f, 0.0f});
     for (size_t n = 0; n < na + nb - 1; ++n)
     {
-        std::complex<double> acc{ 0.0f, 0.0f };
+        std::complex<double> acc{0.0f, 0.0f};
         for (size_t m = 0; m < nb; ++m)
         {
             size_t k = n - m;
@@ -220,9 +291,7 @@ void qam16_3gpp_rrc(const std::vector<int> &bits, std::vector<int16_t> &buffer, 
     rrc(beta, sps, span, rrc_h);
     filter_rrc(upsampled, rrc_h, signal);
     std::complex<double> maxcp = *std::max_element(signal.begin(), signal.end(), [](const std::complex<double> &a, const std::complex<double> &b)
-        {
-            return std::real(a) < std::real(b);
-        });
+                                                   { return std::real(a) < std::real(b); });
     double max = maxcp.real();
 
     size_t size = signal.size();
@@ -318,21 +387,21 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, SharedData
 
     fftwf_execute(ifft.plan);
 
-    //Norm
+    // Norm
     for (int n = 0; n < N; ++n)
     {
         ifft.out[n][0] /= (float)(N / (3.0 * 16000.0));
         ifft.out[n][1] /= (float)(N / (3.0 * 16000.0));
     }
 
-    //Cyclic Prefix
+    // Cyclic Prefix
     for (int n = N - Ncp; n < N; ++n)
     {
         buffer.push_back((int16_t)ifft.out[n][0]);
         buffer.push_back((int16_t)ifft.out[n][1]);
     }
 
-    //Data
+    // Data
     for (int n = 0; n < N; ++n)
     {
         buffer.push_back((int16_t)ifft.out[n][0]);
@@ -364,21 +433,21 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, SharedData
 
         fftwf_execute(ifft.plan);
 
-        //Norm
+        // Norm
         for (int n = 0; n < N; ++n)
         {
             ifft.out[n][0] /= (float)(N / (3.0 * 16000.0f));
             ifft.out[n][1] /= (float)(N / (3.0 * 16000.0f));
         }
 
-        //Cyclic Prefix
+        // Cyclic Prefix
         for (int n = N - Ncp; n < N; ++n)
         {
             buffer.push_back((int16_t)ifft.out[n][0]);
             buffer.push_back((int16_t)ifft.out[n][1]);
         }
 
-        //Data
+        // Data
         for (int n = 0; n < N; ++n)
         {
             buffer.push_back((int16_t)ifft.out[n][0]);
@@ -389,7 +458,7 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, SharedData
 
 void implement_barker(std::vector<int16_t> &symbols, int sps)
 {
-    std::vector<int> barker = { 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0 };
+    std::vector<int> barker = {0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0};
     std::vector<int16_t> out(barker.size() * sps * 2);
     bpsk_3gpp(barker, out, 10);
     symbols.insert(symbols.begin(), out.begin(), out.end());
@@ -458,7 +527,7 @@ int init(sdr_config_t *config)
     // sdr->setIQBalanceMode(SOAPY_SDR_TX, 0, true);
 
     // Stream parameters
-    std::vector<size_t> channels = { 0 };
+    std::vector<size_t> channels = {0};
     if (config->rx_stream)
     {
         config->rxStream = config->sdr->setupStream(SOAPY_SDR_RX, SOAPY_SDR_CS16, channels);
@@ -550,10 +619,10 @@ void apply_runtime(sdr_config_t &context)
 
 std::vector<std::complex<float>> generate_minn_preamble(size_t N)
 {
-    std::vector<std::complex<float>> freq(N, { 0,0 });
+    std::vector<std::complex<float>> freq(N, {0, 0});
 
     for (size_t k = 1; k < N; k += 4)
-        freq[k] = std::complex<float>{ 1.0, 0 }; // BPSK
+        freq[k] = std::complex<float>{1.0, 0}; // BPSK
 
     return freq;
 }
