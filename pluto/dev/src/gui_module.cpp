@@ -189,7 +189,7 @@ namespace gui
         static bool is_scanning = false;
         std::vector<std::string> modulations = { "BPSK", "QPSK", "QAM16", "QAM16 RRC", "OFDM" };
         std::vector<std::string> syncs = { "ZC", "CP", "SC" };
-        std::vector<std::string> ofdm_modulations = { "BPSK", "QPSK", "QAM16", "QAM64" };
+        std::vector<std::string> ofdm_modulations = { "BPSK", "QPSK", "QAM16", "QAM64", "QAM256" };
         static std::string preview_mod = modulations[context.modulation_type];
         static std::string preview_ofdm_mod = "";
         if (data.mod.ModulationType) preview_ofdm_mod = ofdm_modulations[data.ofdm_cfg.mod];
