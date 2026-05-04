@@ -2,8 +2,8 @@
 
 #include <cstdint>
 #include <vector>
-#include "pluto_lib.h"
-#include "dsp_module.h"
+#include "dsp_rx.h"
+#include "dsp_tx.h"
 
 namespace gui
 {

@@ -1,5 +1,5 @@
-#include "dsp_module.h"
-#include "pluto_lib.h"
+#include "dsp_rx.h"
+#include "dsp_tx.h"
 
 #include <vector>
 #include <complex>
@@ -272,7 +272,6 @@ void calculate_pilots_and_guard(SharedData_t::OFDMConfig ofdm_config, std::vecto
         counter++;
     }
 };
-
 
 void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t::OFDMConfig ofdm_config, std::vector<std::complex<float>> &h_est)
 {

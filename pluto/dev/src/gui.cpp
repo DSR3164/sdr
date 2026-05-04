@@ -15,7 +15,7 @@
 #include "implot.h"
 #include "fftw3.h"
 #include "gui.h"
-#include <dsp_module.h>
+#include <dsp_rx.h>
 #include <SoapySDR/Device.hpp>
 #include <vector>
 

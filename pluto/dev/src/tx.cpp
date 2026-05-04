@@ -12,7 +12,7 @@
 #include "imgui.h"
 #include "implot.h"
 #include "gui.h"
-#include <dsp_module.h>
+#include <dsp_tx.h>
 #include <SoapySDR/Device.hpp>
 #include <vector>
 

@@ -64,8 +64,8 @@ target_compile_options(implot3d PRIVATE -fPIC)
 
 # Core library (your code once)
 add_library(pluto_core STATIC
-  src/pluto_lib.cpp
-  src/dsp_module.cpp
+  src/dsp_tx.cpp
+  src/dsp_rx.cpp
   src/gui_module.cpp
 )
 target_include_directories(pluto_core PUBLIC

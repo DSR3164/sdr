@@ -1,6 +1,6 @@
 #pragma once
 
-#include "dsp_module.h"
+#include "dsp_rx.h"
 
 #include <SoapySDR/Device.hpp>
 #include <complex>

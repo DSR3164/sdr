@@ -3,12 +3,12 @@
 
 #include <SoapySDR/Device.hpp>
 #include <SoapySDR/Formats.hpp>
-#include "pluto_lib.h"
+#include "dsp_tx.h"
+#include "dsp_rx.h"
 #include <cstring>
 #include <fftw3.h>
 #include <vector>
 #include "gui.h"
-#include "dsp_module.h"
 #include "imgui.h"
 #include <thread>
 
