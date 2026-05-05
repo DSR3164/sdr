@@ -64,16 +64,21 @@ target_compile_options(implot3d PRIVATE -fPIC)
 
 # Core library (your code once)
 add_library(pluto_core STATIC
-  src/dsp_tx.cpp
-  src/dsp_rx.cpp
+  src/dsp.cpp
   src/gui_module.cpp
 )
 target_include_directories(pluto_core PUBLIC
   ${PROJECT_SOURCE_DIR}/include
   ${THIRD_PARTY_DIR}/imgui
+  ${THIRD_PARTY_DIR}/implot
   ${THIRD_PARTY_DIR}/imgui/backends
 )
-target_link_libraries(pluto_core PUBLIC ${SoapySDR_LIBRARIES})
+target_link_libraries(pluto_core PUBLIC
+  ${SoapySDR_LIBRARIES}
+  PRIVATE
+  imgui
+  implot
+)
 
 # FFTW3F include/lib flags
 target_include_directories(pluto_core PRIVATE ${FFTW3F_INCLUDE_DIRS})
