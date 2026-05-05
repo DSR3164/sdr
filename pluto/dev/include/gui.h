@@ -1,7 +1,8 @@
 #pragma once
 
-#include <vector>
 #include "dsp.h"
+
+#include <vector>
 
 inline constexpr int NFFT = 2048;
 inline constexpr int NFFTW = NFFT / 2;

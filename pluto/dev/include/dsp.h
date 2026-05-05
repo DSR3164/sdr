@@ -1,12 +1,12 @@
 #pragma once
 
-#include <vector>
-#include <complex>
-#include <cmath>
+#include <SoapySDR/Device.hpp>
 #include <atomic>
+#include <cmath>
+#include <complex>
 #include <fftw3.h>
 #include <iostream>
-#include <SoapySDR/Device.hpp>
+#include <vector>
 
 enum class Flags : uint16_t
 {
@@ -25,21 +25,22 @@ enum class Flags : uint16_t
 inline Flags operator|(Flags a, Flags b)
 {
     return static_cast<Flags>(
-        static_cast<uint16_t>(a) |
-        static_cast<uint16_t>(b));
+        static_cast<uint16_t>(a) | static_cast<uint16_t>(b)
+    );
 }
 
 inline Flags operator&(Flags a, Flags b)
 {
     return static_cast<Flags>(
-        static_cast<uint16_t>(a) &
-        static_cast<uint16_t>(b));
+        static_cast<uint16_t>(a) & static_cast<uint16_t>(b)
+    );
 }
 
 inline Flags operator~(Flags a)
 {
     return static_cast<Flags>(
-        ~static_cast<uint16_t>(a));
+        ~static_cast<uint16_t>(a)
+    );
 }
 
 inline Flags &operator|=(Flags &a, Flags b)
@@ -51,8 +52,8 @@ inline Flags &operator|=(Flags &a, Flags b)
 inline Flags &operator&=(Flags &a, Flags b)
 {
     a = static_cast<Flags>(
-        static_cast<uint16_t>(a) &
-        static_cast<uint16_t>(b));
+        static_cast<uint16_t>(a) & static_cast<uint16_t>(b)
+    );
     return a;
 }
 
@@ -88,7 +89,7 @@ typedef struct sdr_config_s
 
     std::vector<int16_t> rxbuffer;
     std::vector<int16_t> txbuffer;
-    size_t channels[1] = {0};
+    size_t channels[1] = { 0 };
     SoapySDR::Device *sdr;
     SoapySDR::Stream *rxStream;
     SoapySDR::Stream *txStream;
@@ -96,8 +97,7 @@ typedef struct sdr_config_s
     bool tx_stream = true;
     bool rx_stream = true;
 
-    sdr_config_s(std::string name, size_t buf, double sr,
-                 double tx_f, double rx_f, float tx_g, float rx_g, bool t = true, bool r = true)
+    sdr_config_s(std::string name, size_t buf, double sr, double tx_f, double rx_f, float tx_g, float rx_g, bool t = true, bool r = true)
         : sdr_name(name),
           modulation_type(1),
           buffer_size(buf),
@@ -108,7 +108,7 @@ typedef struct sdr_config_s
           tx_bandwidth(1e6),
           tx_gain(tx_g),
           rx_gain(rx_g),
-          channels{0},
+          channels{ 0 },
           sdr(nullptr),
           rxStream(nullptr),
           txStream(nullptr),
@@ -200,9 +200,8 @@ struct FFTWPlan
 };
 
 template <typename T>
-class DoubleBuffer
-{
-public:
+class DoubleBuffer {
+  public:
     DoubleBuffer(size_t reserve_size = 4096)
     {
         buff[0].resize(reserve_size);
@@ -248,12 +247,11 @@ public:
     {
         return ready.load(std::memory_order_relaxed);
     }
-
-private:
+  private:
     std::vector<T> buff[2];
-    std::atomic<int> write_index{0}; // куда пишет SDR
-    std::atomic<int> read_index{1};  // откуда читает DSP
-    std::atomic<bool> ready{false};
+    std::atomic<int> write_index{ 0 }; // куда пишет SDR
+    std::atomic<int> read_index{ 1 };  // откуда читает DSP
+    std::atomic<bool> ready{ false };
 };
 
 typedef struct SharedData

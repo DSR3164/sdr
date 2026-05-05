@@ -1,28 +1,26 @@
-#include "gui.h"
 #include "dsp.h"
+#include "gui.h"
 
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
-#include "backends/imgui_impl_opengl3.h"
-#include "backends/imgui_impl_sdl2.h"
-#include "imgui.h"
-#include "implot.h"
-
 #include <SoapySDR/Device.hpp>
 #include <SoapySDR/Formats.hpp>
-#include <cstring>
-#include <fftw3.h>
-#include <vector>
-#include <thread>
+#include <algorithm>
+#include <backends/imgui_impl_opengl3.h>
+#include <backends/imgui_impl_sdl2.h>
 #include <complex>
 #include <cstddef>
 #include <cstdint>
-#include <algorithm>
+#include <cstring>
+#include <fftw3.h>
+#include <imgui.h>
+#include <implot.h>
 #include <thread>
+#include <vector>
 
 FFTWPlan &fftw_singleton(size_t size)
 {
-    static FFTWPlan p{size};
+    static FFTWPlan p{ size };
     return p;
 }
 
@@ -188,12 +186,12 @@ int context_edit_window(sdr_config_t &context, SharedData_t &data)
     ImGuiIO &io = ImGui::GetIO();
     static int current_rx_borhwidth = 10;
     static int current_tx_borhwidth = 1;
-    static std::vector<float> values = {0.2e6, 1e6, 2e6, 3e6, 4e6, 5e6, 6e6, 7e6, 8e6, 9e6, 10e6};
+    static std::vector<float> values = { 0.2e6, 1e6, 2e6, 3e6, 4e6, 5e6, 6e6, 7e6, 8e6, 9e6, 10e6 };
     static SoapySDR::KwargsList list;
     static bool is_scanning = false;
-    std::vector<std::string> modulations = {"BPSK", "QPSK", "QAM16", "QAM16 RRC", "OFDM"};
-    std::vector<std::string> syncs = {"ZC", "CP", "SC"};
-    std::vector<std::string> ofdm_modulations = {"BPSK", "QPSK", "QAM16", "QAM64", "QAM256"};
+    std::vector<std::string> modulations = { "BPSK", "QPSK", "QAM16", "QAM16 RRC", "OFDM" };
+    std::vector<std::string> syncs = { "ZC", "CP", "SC" };
+    std::vector<std::string> ofdm_modulations = { "BPSK", "QPSK", "QAM16", "QAM64", "QAM256" };
     static std::string preview_mod = modulations[context.modulation_type];
     static std::string preview_ofdm_mod = "";
     if (data.mod.ModulationType)
@@ -330,12 +328,7 @@ int context_edit_window(sdr_config_t &context, SharedData_t &data)
                 ImVec2 pos = ImGui::GetItemRectMin();
                 pos.y -= 30;
                 ImGui::SetNextWindowPos(pos);
-                ImGui::Begin("send_warning", nullptr,
-                             ImGuiWindowFlags_NoTitleBar |
-                                 ImGuiWindowFlags_AlwaysAutoResize |
-                                 ImGuiWindowFlags_NoMove |
-                                 ImGuiWindowFlags_NoSavedSettings |
-                                 ImGuiWindowFlags_NoInputs);
+                ImGui::Begin("send_warning", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs);
 
                 ImGui::TextColored(ImVec4(1, 1, 0, 1), "Warning: cannot stream with that sample rate!");
                 ImGui::End();
@@ -420,7 +413,8 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
     SDL_Window *window = SDL_CreateWindow(
         "ImGUI RF", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        1520, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+        1520, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
+    );
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     ImGui::CreateContext();
     ImPlot::CreateContext();
@@ -516,7 +510,8 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
                         data.ofdm_cfg.n_subcarriers * 10,
                         0,
                         0,
-                        sizeof(std::complex<float>));
+                        sizeof(std::complex<float>)
+                    );
 
                     ImPlot::EndPlot();
                 }
@@ -525,14 +520,8 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
                 ImGui::Begin("OFDM");
                 if (ImPlot::BeginPlot("I:Q", ImGui::GetContentRegionAvail()))
                 {
-                    ImPlot::PlotLine("I",
-                                     reinterpret_cast<const float *>(ofdm.data()),
-                                     data.ofdm_cfg.n_subcarriers * 10, 1.0, 0.0, 0, 0,
-                                     sizeof(std::complex<float>));
-                    ImPlot::PlotLine("Q",
-                                     reinterpret_cast<const float *>(ofdm.data()) + 1,
-                                     data.ofdm_cfg.n_subcarriers * 10, 1.0, 0.0, 0, 0,
-                                     sizeof(std::complex<float>));
+                    ImPlot::PlotLine("I", reinterpret_cast<const float *>(ofdm.data()), data.ofdm_cfg.n_subcarriers * 10, 1.0, 0.0, 0, 0, sizeof(std::complex<float>));
+                    ImPlot::PlotLine("Q", reinterpret_cast<const float *>(ofdm.data()) + 1, data.ofdm_cfg.n_subcarriers * 10, 1.0, 0.0, 0, 0, sizeof(std::complex<float>));
                     ImPlot::EndPlot();
                 }
                 ImGui::End();
@@ -563,7 +552,8 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
                     reinterpret_cast<const float *>(raw.data()),
                     reinterpret_cast<const float *>(raw.data()) + 1,
                     raw.size(), 0, 0,
-                    sizeof(std::complex<float>));
+                    sizeof(std::complex<float>)
+                );
 
                 ImPlot::EndPlot();
             }
@@ -572,14 +562,8 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
             ImGui::Begin("Time domain raw");
             if (ImPlot::BeginPlot("I:Q", ImGui::GetContentRegionAvail()))
             {
-                ImPlot::PlotLine("I",
-                                 reinterpret_cast<const float *>(raw.data()),
-                                 raw.size(), 1.0, 0.0, 0, 0,
-                                 sizeof(std::complex<float>));
-                ImPlot::PlotLine("Q",
-                                 reinterpret_cast<const float *>(raw.data()) + 1,
-                                 raw.size(), 1.0, 0.0, 0, 0,
-                                 sizeof(std::complex<float>));
+                ImPlot::PlotLine("I", reinterpret_cast<const float *>(raw.data()), raw.size(), 1.0, 0.0, 0, 0, sizeof(std::complex<float>));
+                ImPlot::PlotLine("Q", reinterpret_cast<const float *>(raw.data()) + 1, raw.size(), 1.0, 0.0, 0, 0, sizeof(std::complex<float>));
                 ImPlot::EndPlot();
             }
             ImGui::End();
@@ -603,10 +587,8 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
             ImGui::Begin("history");
             if (ImPlot::BeginPlot("I:Q", ImGui::GetContentRegionAvail()))
             {
-                ImPlot::PlotLine("I", reinterpret_cast<const float *>(data.history.receive.data()),
-                                 data.history.receive.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
-                ImPlot::PlotLine("Q", reinterpret_cast<const float *>(data.history.receive.data()) + 1,
-                                 data.history.receive.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
+                ImPlot::PlotLine("I", reinterpret_cast<const float *>(data.history.receive.data()), data.history.receive.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
+                ImPlot::PlotLine("Q", reinterpret_cast<const float *>(data.history.receive.data()) + 1, data.history.receive.size(), 1.0, 0, 0, 0, sizeof(std::complex<float>));
 
                 ImPlot::EndPlot();
             }
@@ -638,7 +620,7 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
                     ImPlot::SetupAxes("Subcarrier", "", ImPlotAxisFlags_None, ImPlotAxisFlags_NoDecorations);
                     ImPlot::SetupAxisLimits(ImAxis_X1, -N / 2 - 0.5, N / 2 - 0.5, ImGuiCond_Always);
                     ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1, ImGuiCond_Always);
-                    const char *labels[3] = {"Guard", "Data", "Pilot"};
+                    const char *labels[3] = { "Guard", "Data", "Pilot" };
                     static ImVec4 colors[] = {
                         ImVec4(0.1f, 0.1f, 0.1f, 1.0f), // Guard - тёмный
                         ImVec4(0.2f, 0.6f, 1.0f, 1.0f), // Data - синий
@@ -647,13 +629,13 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
                     static ImPlotColormap cmap = ImPlot::AddColormap("OFDM", colors, 3);
 
                     ImPlot::PushColormap(cmap);
-                    ImPlot::PlotHeatmap("##grid", grid.data(), 1, N, 0, 1, nullptr,
-                                        ImPlotPoint(-N / 2 - 0.5, 0), ImPlotPoint(N / 2 - 0.5, 1));
+                    ImPlot::PlotHeatmap("##grid", grid.data(), 1, N, 0, 1, nullptr, ImPlotPoint(-N / 2 - 0.5, 0), ImPlotPoint(N / 2 - 0.5, 1));
 
                     std::vector<int> counts = {
                         (int)(N - datas.size() - pilots.size()),
                         (int)datas.size(),
-                        (int)pilots.size()};
+                        (int)pilots.size()
+                    };
 
                     for (int i = 0; i < 3; ++i)
                     {
@@ -695,13 +677,9 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
                             abs.push_back(std::abs(x));
                         if (!data.gui.estimation.empty())
                         {
-                            ImPlot::PlotLine("I",
-                                             reinterpret_cast<const float *>(data.gui.estimation.data()),
-                                             1.0, 0, 0, sizeof(std::complex<float>));
+                            ImPlot::PlotLine("I", reinterpret_cast<const float *>(data.gui.estimation.data()), 1.0, 0, 0, sizeof(std::complex<float>));
 
-                            ImPlot::PlotLine("Q",
-                                             reinterpret_cast<const float *>(data.gui.estimation.data()) + 1,
-                                             1.0, 0, 0, sizeof(std::complex<float>));
+                            ImPlot::PlotLine("Q", reinterpret_cast<const float *>(data.gui.estimation.data()) + 1, 1.0, 0, 0, sizeof(std::complex<float>));
                         }
 
                         ImPlot::EndPlot();
@@ -767,7 +745,8 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
                         reinterpret_cast<const float *>(data.mod.sync.data()),
                         reinterpret_cast<const float *>(data.mod.sync.data()) + 1,
                         data.mod.sync.size(), 0, 0,
-                        sizeof(std::complex<float>));
+                        sizeof(std::complex<float>)
+                    );
                     ImPlot::EndPlot();
                 }
                 ImGui::End();
@@ -796,7 +775,8 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
                         reinterpret_cast<const float *>(data.mod.conv.data()),
                         reinterpret_cast<const float *>(data.mod.conv.data()) + 1,
                         data.mod.conv.size(), 0, 0,
-                        sizeof(std::complex<float>));
+                        sizeof(std::complex<float>)
+                    );
                     ImPlot::EndPlot();
                 }
                 ImGui::End();
@@ -825,7 +805,8 @@ void run_gui(sdr_config_t &context, SharedData_t &data)
                         reinterpret_cast<const float *>(data.mod.demodul.data()),
                         reinterpret_cast<const float *>(data.mod.demodul.data()) + 1,
                         data.mod.demodul.size(), 0, 0,
-                        sizeof(std::complex<float>));
+                        sizeof(std::complex<float>)
+                    );
                     ImPlot::EndPlot();
                 }
                 ImGui::End();

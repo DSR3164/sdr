@@ -1,19 +1,18 @@
+#include "dsp.h"
+#include "gui.h"
+
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
-
+#include <SoapySDR/Device.hpp>
+#include <backends/imgui_impl_opengl3.h>
+#include <backends/imgui_impl_sdl2.h>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <imgui.h>
+#include <implot.h>
 #include <iostream>
 #include <thread>
-
-#include "backends/imgui_impl_opengl3.h"
-#include "backends/imgui_impl_sdl2.h"
-#include "imgui.h"
-#include "implot.h"
-#include "gui.h"
-#include <dsp_tx.h>
-#include <SoapySDR/Device.hpp>
 #include <vector>
 
 static bool flag_barker = false;
@@ -69,12 +68,11 @@ int context_edit_window(sdr_config_t &context)
         {
             is_scanning = true;
             auto scan = std::thread([&context]
-                {
+                                    {
                     SoapySDR::Kwargs args;
                     args["driver"] = "plutosdr";
                     list = SoapySDR::Device::enumerate(args);
-                    is_scanning = false;
-                });
+                    is_scanning = false; });
 
             scan.detach();
         }
@@ -165,7 +163,8 @@ void run_gui(sdr_config_t &context, int &send)
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
     SDL_Window *window = SDL_CreateWindow(
         "ImGUI RF", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        1520, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+        1520, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
+    );
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     ImGui::CreateContext();
     ImPlot::CreateContext();
@@ -216,7 +215,6 @@ void run_gui(sdr_config_t &context, int &send)
                     txraw_q[i] = (tx_copy[2 * i + 1]);
                 }
             }
-
 
             ImGui::Begin("Constellation", nullptr, ImGuiWindowFlags_MenuBar);
             ImGui::Text("Sending %d samples)", send);
@@ -343,13 +341,11 @@ int sdr_tx(sdr_config_t &context, int &send)
                 else
                     break;
             }
-
         }
     }
     deinit(&context);
     return 0;
 }
-
 
 int main()
 {
@@ -358,7 +354,8 @@ int main()
         3.84e6,
         826e6, 826e6,
         89.0, 25.0,
-        true, false);
+        true, false
+    );
     int send = 0;
     sdr.n = 256;
     sdr.ncp = 16;

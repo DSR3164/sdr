@@ -1,6 +1,7 @@
 #include "dsp.h"
-#include <iostream>
 #include "fstream"
+
+#include <iostream>
 
 using namespace std;
 
@@ -17,10 +18,7 @@ int main()
 
     std::fstream file("../pcm/ofdm2.pcm", std::ios::out | std::ios::binary);
 
-    file.write(reinterpret_cast<char *>(
-        tx_buffer.data()),
-        tx_buffer.size()
-        * sizeof(int16_t));
+    file.write(reinterpret_cast<char *>(tx_buffer.data()), tx_buffer.size() * sizeof(int16_t));
     file.close();
     return 0;
 }

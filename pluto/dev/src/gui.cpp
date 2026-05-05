@@ -1,5 +1,5 @@
-#include "gui.h"
 #include "dsp.h"
+#include "gui.h"
 
 #include <thread>
 
@@ -15,7 +15,8 @@ int main(int argc, char *argv[])
         1.92e6,
         2e9, 2e9,
         89.0, 25.0,
-        true, true);
+        true, true
+    );
     sdr.modulation_type = 4;
     sdr.flags |= Flags::APPLY_BANDWIDTH;
     int subcarrier_count = static_cast<int>(sdr.sample_rate / 15e3);

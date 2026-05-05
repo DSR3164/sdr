@@ -1,23 +1,24 @@
 #include "dsp.h"
 #include "gui.h"
 
-#include <vector>
-#include <complex>
-#include <cmath>
-#include <cstddef>
-#include <chrono>
-#include <thread>
-#include <fstream>
-#include <algorithm>
 #include <SoapySDR/Formats.hpp>
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <complex>
+#include <cstddef>
+#include <fstream>
+#include <thread>
+#include <vector>
 
 void bpsk_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols)
 {
     for (size_t i = 0; i < symbols.size(); ++i)
         symbols[i] = std::complex<double>(
                          bits[i] * -2.0 + 1.0,
-                         bits[i] * -2.0 + 1.0) /
-                     sqrt(2);
+                         bits[i] * -2.0 + 1.0
+                     )
+                     / sqrt(2);
 }
 
 void qpsk_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols)
@@ -25,8 +26,9 @@ void qpsk_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<dou
     for (size_t i = 0; i < symbols.size(); ++i)
         symbols[i] = std::complex<double>(
                          bits[2 * i + 0] * -2.0 + 1.0,
-                         bits[2 * i + 1] * -2.0 + 1.0) /
-                     sqrt(2.0);
+                         bits[2 * i + 1] * -2.0 + 1.0
+                     )
+                     / sqrt(2.0);
 }
 
 void qam16_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols)
@@ -34,8 +36,9 @@ void qam16_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<do
     for (size_t i = 0; i < symbols.size(); ++i)
         symbols[i] = std::complex<double>(
                          (1 - 2 * bits[4 * i + 0]) * (2 - (1 - 2 * bits[4 * i + 2])),
-                         (1 - 2 * bits[4 * i + 1]) * (2 - (1 - 2 * bits[4 * i + 3]))) /
-                     sqrt(10.0);
+                         (1 - 2 * bits[4 * i + 1]) * (2 - (1 - 2 * bits[4 * i + 3]))
+                     )
+                     / sqrt(10.0);
 }
 
 void qam64_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols)
@@ -43,8 +46,9 @@ void qam64_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<do
     for (size_t i = 0; i < symbols.size(); ++i)
         symbols[i] = std::complex<double>(
                          (1 - 2 * bits[6 * i + 0]) * (4 - (1 - 2 * bits[6 * i + 2]) * (2 - (1 - 2 * bits[6 * i + 4]))),
-                         (1 - 2 * bits[6 * i + 1]) * (4 - (1 - 2 * bits[6 * i + 3]) * (2 - (1 - 2 * bits[6 * i + 5])))) /
-                     sqrt(42.0);
+                         (1 - 2 * bits[6 * i + 1]) * (4 - (1 - 2 * bits[6 * i + 3]) * (2 - (1 - 2 * bits[6 * i + 5])))
+                     )
+                     / sqrt(42.0);
 }
 
 void qam256_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<double>> &symbols)
@@ -53,8 +57,9 @@ void qam256_mapper_3gpp(const std::vector<int> &bits, std::vector<std::complex<d
     {
         symbols[i] = std::complex<double>(
                          (1 - 2 * bits[8 * i + 0]) * (8 - (1 - 2 * bits[8 * i + 2]) * (4 - (1 - 2 * bits[8 * i + 4]) * (2 - (1 - 2 * bits[8 * i + 6])))),
-                         (1 - 2 * bits[8 * i + 1]) * (8 - (1 - 2 * bits[8 * i + 3]) * (4 - (1 - 2 * bits[8 * i + 5]) * (2 - (1 - 2 * bits[8 * i + 7]))))) /
-                     sqrt(170.0f);
+                         (1 - 2 * bits[8 * i + 1]) * (8 - (1 - 2 * bits[8 * i + 3]) * (4 - (1 - 2 * bits[8 * i + 5]) * (2 - (1 - 2 * bits[8 * i + 7]))))
+                     )
+                     / sqrt(170.0f);
     }
 }
 
@@ -62,7 +67,7 @@ static std::pair<uint8_t, uint8_t> demap_component_3gpp(float val)
 {
     uint8_t b_sign = (val < 0.0f) ? 1 : 0;
     uint8_t b_amp = (std::abs(val) < 2.0f) ? 0 : 1;
-    return {b_sign, b_amp};
+    return { b_sign, b_amp };
 }
 
 void bpsk_demapper_3gpp(const std::vector<std::complex<float>> &symbols, std::vector<int> &bits)
@@ -199,8 +204,7 @@ void rrc(double beta, int sps, int N, std::vector<double> &h)
         if (t == 0.0)
             h[i] = 1.0 - beta + 4 * beta / M_PIf;
         else if (std::abs(std::abs(t) - T / (4 * beta)) < eps)
-            h[i] = (beta / sqrt(2)) * ((1 + 2 / M_PIf) * sin(M_PIf / (4 * beta)) +
-                                       (1 - 2 / M_PIf) * cos(M_PIf / (4 * beta)));
+            h[i] = (beta / sqrt(2)) * ((1 + 2 / M_PIf) * sin(M_PIf / (4 * beta)) + (1 - 2 / M_PIf) * cos(M_PIf / (4 * beta)));
         else
             h[i] = (sin(M_PIf * t * (1 - beta) / T) + 4 * beta * t / T * cos(M_PIf * t * (1 + beta) / T)) / (M_PIf * t * (1 - (4 * beta * t / T) * (4 * beta * t / T)));
     }
@@ -210,10 +214,10 @@ void filter_rrc(const std::vector<std::complex<double>> &a, const std::vector<do
 {
     size_t nb = b.size();
     size_t na = a.size();
-    y.resize(na + nb - 1, {0.0f, 0.0f});
+    y.resize(na + nb - 1, { 0.0f, 0.0f });
     for (size_t n = 0; n < na + nb - 1; ++n)
     {
-        std::complex<double> acc{0.0f, 0.0f};
+        std::complex<double> acc{ 0.0f, 0.0f };
         for (size_t m = 0; m < nb; ++m)
         {
             size_t k = n - m;
@@ -476,7 +480,7 @@ void ofdm(const std::vector<int> &bits, std::vector<int16_t> &buffer, SharedData
 
 void implement_barker(std::vector<int16_t> &symbols, int sps)
 {
-    std::vector<int> barker = {0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0};
+    std::vector<int> barker = { 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0 };
     std::vector<int16_t> out(barker.size() * sps * 2);
     bpsk_3gpp(barker, out, 10);
     symbols.insert(symbols.begin(), out.begin(), out.end());
@@ -545,7 +549,7 @@ int init(sdr_config_t *config)
     // sdr->setIQBalanceMode(SOAPY_SDR_TX, 0, true);
 
     // Stream parameters
-    std::vector<size_t> channels = {0};
+    std::vector<size_t> channels = { 0 };
     if (config->rx_stream)
     {
         config->rxStream = config->sdr->setupStream(SOAPY_SDR_RX, SOAPY_SDR_CS16, channels);
@@ -666,10 +670,10 @@ void change_modulation(sdr_config_t &sdr_config, std::vector<int16_t> &tx_buffer
 
 std::vector<std::complex<float>> generate_minn_preamble(size_t N)
 {
-    std::vector<std::complex<float>> freq(N, {0, 0});
+    std::vector<std::complex<float>> freq(N, { 0, 0 });
 
     for (size_t k = 1; k < N; k += 4)
-        freq[k] = std::complex<float>{1.0, 0}; // BPSK
+        freq[k] = std::complex<float>{ 1.0, 0 }; // BPSK
 
     return freq;
 }
@@ -705,9 +709,7 @@ std::vector<std::complex<float>> gardner(const std::vector<std::complex<float>> 
         std::complex<float> s0 = input[idx0];
         std::complex<float> sm = input[idxm];
 
-        float e =
-            (std::real(s1) - std::real(s0)) * std::real(sm) +
-            (std::imag(s1) - std::imag(s0)) * std::imag(sm);
+        float e = (std::real(s1) - std::real(s0)) * std::real(sm) + (std::imag(s1) - std::imag(s0)) * std::imag(sm);
 
         float p1 = e * K1;
         p2 += p1 + e * K2;
@@ -764,7 +766,7 @@ std::vector<std::complex<float>> convolve_ones(const std::vector<std::complex<fl
     const std::ptrdiff_t N = static_cast<std::ptrdiff_t>(x.size());
     const std::ptrdiff_t M = (N > 0 && SPS > 0) ? (N + SPS - 1) : 0;
 
-    std::vector<std::complex<float>> y(static_cast<size_t>(M), {0.0f, 0.0f});
+    std::vector<std::complex<float>> y(static_cast<size_t>(M), { 0.0f, 0.0f });
 
     std::complex<float> acc(0.0f, 0.0f);
 
@@ -946,7 +948,7 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t::OFDMCo
 {
     int N = ofdm_config.n_subcarriers;
     float accumulated_phase = 0;
-    const std::complex<float> known_pilot = {1.0f, 0.0f};
+    const std::complex<float> known_pilot = { 1.0f, 0.0f };
     std::vector<std::complex<float>> temp = input;
     input.clear();
     h_est.clear();
@@ -958,14 +960,13 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, SharedData_t::OFDMCo
 
     calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
 
-    std::vector<std::complex<float>> H_prev(N, {1, 0});
+    std::vector<std::complex<float>> H_prev(N, { 1, 0 });
 
     for (size_t i = 0; i + N <= temp.size(); i += N)
     {
-        std::vector<std::complex<float>> sym(temp.begin() + i,
-                                             temp.begin() + i + N);
+        std::vector<std::complex<float>> sym(temp.begin() + i, temp.begin() + i + N);
 
-        std::vector<std::complex<float>> H(N, {0, 0});
+        std::vector<std::complex<float>> H(N, { 0, 0 });
         std::vector<std::complex<float>> equalized(N);
 
         for (auto k : pilots)
@@ -1228,7 +1229,7 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
                 float I = in[0];
                 float Q = in[1];
 
-                out[i] = {I, Q};
+                out[i] = { I, Q };
                 in += 2;
             }
         }
@@ -1267,8 +1268,7 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
                 case 0:
                     data.dsp.max_index = zc_sync(for_ofdm, zadoff_chu, zc_energy, data.gui.plato);
                     break;
-                case 1:
-                {
+                case 1: {
                     static float coarse_mean = 0.0f;
                     data.dsp.max_index = ofdm_cp_sync(for_ofdm, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.n_cp, dummy);
                     float coarse = coarse_cfo(for_ofdm, data.dsp.max_index, data.ofdm_cfg.n_subcarriers, data.ofdm_cfg.n_cp, context.sample_rate);
@@ -1377,7 +1377,7 @@ int run_dsp(sdr_config_t &context, SharedData_t &data)
 int run_sdr(sdr_config_t &context, SharedData_t &data)
 {
     // код
-    std::vector<std::string> modulations = {"BPSK", "QPSK", "QAM16", "QAM16 RRC", "OFDM"};
+    std::vector<std::string> modulations = { "BPSK", "QPSK", "QAM16", "QAM16 RRC", "OFDM" };
     Flags apply = Flags::APPLY_BANDWIDTH | Flags::APPLY_FREQUENCY | Flags::APPLY_GAIN | Flags::APPLY_SAMPLE_RATE;
     while (!has_flag(context.flags, Flags::IS_ACTIVE))
     {
@@ -1396,7 +1396,7 @@ int run_sdr(sdr_config_t &context, SharedData_t &data)
     gen_bits(data.dsp.N, data.dsp.bits_tx);
     change_modulation(context, tx_buffer, data.dsp.bits_tx, data);
 
-    void *tx_buffs[] = {tx_buffer.data()};
+    void *tx_buffs[] = { tx_buffer.data() };
     int flags = SOAPY_SDR_HAS_TIME;
     long long timeNs;
     long timeoutUs = 400000;
@@ -1430,7 +1430,7 @@ int run_sdr(sdr_config_t &context, SharedData_t &data)
         while (data.gui.stopped)
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-        void *rxbuffs[] = {data.dsp_buff.get_write_buffer().data()};
+        void *rxbuffs[] = { data.dsp_buff.get_write_buffer().data() };
 
         int ret = context.sdr->readStream(
             context.rxStream,
@@ -1438,7 +1438,8 @@ int run_sdr(sdr_config_t &context, SharedData_t &data)
             context.buffer_size,
             flags,
             timeNs,
-            timeoutUs);
+            timeoutUs
+        );
 
         if (ret > 0)
             data.dsp_buff.swap();
